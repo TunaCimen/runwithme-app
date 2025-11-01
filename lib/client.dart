@@ -8,7 +8,7 @@ class StudentApiClient {
   final Dio _dio;
 
   StudentApiClient({
-    String baseUrl = 'http://localhost:8080',
+    required baseUrl,
     Dio? dio,
   }) : _dio = dio ??
             Dio(BaseOptions(
@@ -39,31 +39,39 @@ class StudentApiClient {
 }
 
 class StudentDto {
-  final int id;
-  final String name;
-  final int age;
+  final int studentId;
+  final String firstName;
+  final String lastName;
+  final String dateOfBirth;
   final String email;
 
   StudentDto({
-    required this.id,
-    required this.name,
-    required this.age,
+    required this.studentId,
+    required this.firstName,
+    required this.lastName,
+    required this.dateOfBirth,
     required this.email,
   });
 
   factory StudentDto.fromJson(Map<String, dynamic> json) => StudentDto(
-        id: (json['id'] as num).toInt(),
-        name: json['name'] as String,
-        age: (json['age'] as num).toInt(),
-        email: json['email'] as String,
+        studentId: (json['studentId'] as num?)?.toInt() ?? 0,
+        firstName: json['firstName'] as String? ?? '',
+        lastName: json['lastName'] as String? ?? '',
+        dateOfBirth: json['dateOfBirth'] as String? ?? '',
+        email: json['email'] as String? ?? '',
       );
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'name': name,
-        'age': age,
+        'studentId': studentId,
+        'firstName': firstName,
+        'lastName' : lastName,
+        'dateOfBirth': dateOfBirth,
         'email': email,
       };
+
+   String getFullName(){
+      return "$firstName $lastName";
+   }
 }
 
 class PageResponseStudent {
@@ -92,8 +100,8 @@ class PageResponseStudent {
 
     return PageResponseStudent(
       content: items,
-      page: (json['page'] as num?)?.toInt() ?? 0,
-      size: (json['size'] as num?)?.toInt() ?? items.length,
+      page: (json['pageNumber'] as num?)?.toInt() ?? 0,
+      size: (json['pageSize'] as num?)?.toInt() ?? items.length,
       totalElements: (json['totalElements'] as num?)?.toInt() ?? items.length,
       totalPages: (json['totalPages'] as num?)?.toInt() ?? 1,
       last: json['last'] as bool? ?? true,
