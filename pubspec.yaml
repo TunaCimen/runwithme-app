@@ -11,6 +11,8 @@ dependencies:
     sdk: flutter
   bloc: ^9.1.0
   dio: ^5.9.0
+  flutter_map: ^7.0.2
+  latlong2: ^0.9.1
 
 dev_dependencies:
   flutter_test:
