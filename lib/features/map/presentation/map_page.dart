@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 
 class MapPage extends StatefulWidget {
   const MapPage({super.key});
@@ -8,15 +10,30 @@ class MapPage extends StatefulWidget {
 }
 
 class _MapPageState extends State<MapPage> {
+  final MapController _mapController = MapController();
   bool _isTracking = false;
   String _currentDistance = '0.0';
   String _currentPace = '0:00';
   String _currentDuration = '00:00';
 
+  // Starting location - Istanbul, Turkey (change to your location)
+  static const LatLng _initialCenter = LatLng(41.0082, 28.9784);
+  static const double _initialZoom = 13.0;
+
   // Mock nearby runners
   final List<NearbyRunner> _nearbyRunners = [
-    NearbyRunner(username: 'johndoe', fullName: 'John Doe', distance: 0.5),
-    NearbyRunner(username: 'sarahrunner', fullName: 'Sarah Runner', distance: 1.2),
+    NearbyRunner(
+      username: 'johndoe',
+      fullName: 'John Doe',
+      distance: 0.5,
+      location: const LatLng(41.0092, 28.9794),
+    ),
+    NearbyRunner(
+      username: 'sarahrunner',
+      fullName: 'Sarah Runner',
+      distance: 1.2,
+      location: const LatLng(41.0072, 28.9774),
+    ),
   ];
 
   @override
@@ -24,47 +41,54 @@ class _MapPageState extends State<MapPage> {
     return Scaffold(
       body: Stack(
         children: [
-          // Map placeholder
-          Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Colors.blue[100]!,
-                  Colors.blue[50]!,
-                ],
+          // OpenStreetMap
+          FlutterMap(
+            mapController: _mapController,
+            options: MapOptions(
+              initialCenter: _initialCenter,
+              initialZoom: _initialZoom,
+              minZoom: 3.0,
+              maxZoom: 18.0,
+              interactionOptions: const InteractionOptions(
+                flags: InteractiveFlag.all,
               ),
             ),
-            child: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.map_outlined,
-                    size: 80,
-                    color: Colors.blue[300],
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Map View',
-                    style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.blue[700],
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Map integration coming soon',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.blue[600],
-                    ),
-                  ),
-                ],
+            children: [
+              // OpenStreetMap tile layer
+              TileLayer(
+                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                userAgentPackageName: 'com.example.runwithme_app',
+                maxZoom: 19,
+                subdomains: const ['a', 'b', 'c'],
               ),
-            ),
+              // Markers for nearby runners
+              MarkerLayer(
+                markers: _nearbyRunners.map((runner) {
+                  return Marker(
+                    point: runner.location,
+                    width: 40,
+                    height: 40,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF7ED321),
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white, width: 3),
+                      ),
+                      child: Center(
+                        child: Text(
+                          runner.fullName[0].toUpperCase(),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ],
           ),
 
           // Top bar with search and filters
@@ -75,13 +99,13 @@ class _MapPageState extends State<MapPage> {
             child: SafeArea(
               child: Container(
                 margin: const EdgeInsets.all(16),
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 decoration: BoxDecoration(
                   color: Colors.white,
-                  borderRadius: BorderRadius.circular(30),
+                  borderRadius: BorderRadius.circular(12),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.1),
+                      color: Colors.black.withValues(alpha: 0.1),
                       blurRadius: 10,
                       offset: const Offset(0, 4),
                     ),
@@ -89,12 +113,12 @@ class _MapPageState extends State<MapPage> {
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.search, color: Colors.grey),
+                    Icon(Icons.search, color: Colors.grey[400]),
                     const SizedBox(width: 12),
-                    const Expanded(
+                    Expanded(
                       child: Text(
-                        'Search routes, runners...',
-                        style: TextStyle(color: Colors.grey),
+                        'Search for running partners...',
+                        style: TextStyle(color: Colors.grey[400]),
                       ),
                     ),
                     IconButton(
@@ -109,13 +133,57 @@ class _MapPageState extends State<MapPage> {
             ),
           ),
 
+          // Zoom controls
+          Positioned(
+            right: 16,
+            top: 100,
+            child: SafeArea(
+              child: Column(
+                children: [
+                  FloatingActionButton.small(
+                    heroTag: 'zoom_in',
+                    backgroundColor: Colors.white,
+                    onPressed: () {
+                      _mapController.move(
+                        _mapController.camera.center,
+                        _mapController.camera.zoom + 1,
+                      );
+                    },
+                    child: const Icon(Icons.add, color: Colors.black87),
+                  ),
+                  const SizedBox(height: 8),
+                  FloatingActionButton.small(
+                    heroTag: 'zoom_out',
+                    backgroundColor: Colors.white,
+                    onPressed: () {
+                      _mapController.move(
+                        _mapController.camera.center,
+                        _mapController.camera.zoom - 1,
+                      );
+                    },
+                    child: const Icon(Icons.remove, color: Colors.black87),
+                  ),
+                  const SizedBox(height: 8),
+                  FloatingActionButton.small(
+                    heroTag: 'my_location',
+                    backgroundColor: Colors.white,
+                    onPressed: () {
+                      _mapController.move(_initialCenter, _initialZoom);
+                    },
+                    child: const Icon(Icons.my_location, color: Colors.black87),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
           // Nearby runners list
           if (!_isTracking)
             Positioned(
               bottom: 100,
               left: 0,
               right: 0,
-              child: Container(
+              child: SizedBox(
                 height: 120,
                 child: ListView.builder(
                   scrollDirection: Axis.horizontal,
@@ -141,7 +209,7 @@ class _MapPageState extends State<MapPage> {
                   borderRadius: BorderRadius.circular(20),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.1),
+                      color: Colors.black.withValues(alpha: 0.1),
                       blurRadius: 10,
                       offset: const Offset(0, 4),
                     ),
@@ -170,10 +238,11 @@ class _MapPageState extends State<MapPage> {
             child: Center(
               child: FloatingActionButton.large(
                 onPressed: _toggleTracking,
-                backgroundColor: _isTracking ? Colors.red : Colors.green,
+                backgroundColor: _isTracking ? Colors.red : const Color(0xFF7ED321),
                 child: Icon(
                   _isTracking ? Icons.stop : Icons.play_arrow,
                   size: 40,
+                  color: Colors.white,
                 ),
               ),
             ),
@@ -205,7 +274,7 @@ class _MapPageState extends State<MapPage> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
+            color: Colors.black.withValues(alpha: 0.1),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -216,11 +285,11 @@ class _MapPageState extends State<MapPage> {
         children: [
           CircleAvatar(
             radius: 24,
-            backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+            backgroundColor: const Color(0xFF7ED321).withValues(alpha: 0.2),
             child: Text(
               runner.fullName[0].toUpperCase(),
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.onPrimaryContainer,
+              style: const TextStyle(
+                color: Color(0xFF7ED321),
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -293,12 +362,20 @@ class _MapPageState extends State<MapPage> {
               ListTile(
                 leading: const Icon(Icons.route),
                 title: const Text('Show Routes'),
-                trailing: Switch(value: true, onChanged: (val) {}),
+                trailing: Switch(
+                  value: true,
+                  onChanged: (val) {},
+                  activeColor: const Color(0xFF7ED321),
+                ),
               ),
               ListTile(
                 leading: const Icon(Icons.person),
                 title: const Text('Show Nearby Runners'),
-                trailing: Switch(value: true, onChanged: (val) {}),
+                trailing: Switch(
+                  value: true,
+                  onChanged: (val) {},
+                  activeColor: const Color(0xFF7ED321),
+                ),
               ),
               const SizedBox(height: 20),
             ],
@@ -314,10 +391,12 @@ class NearbyRunner {
   final String username;
   final String fullName;
   final double distance;
+  final LatLng location;
 
   NearbyRunner({
     required this.username,
     required this.fullName,
     required this.distance,
+    required this.location,
   });
 }
