@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import '../../../core/models/user_profile.dart';
 import '../../auth/data/auth_service.dart';
+import '../data/profile_repository.dart';
+import 'edit_profile_page.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -11,11 +14,16 @@ class ProfilePage extends StatefulWidget {
 class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final _authService = AuthService();
+  final _profileRepository = ProfileRepository();
+
+  UserProfile? _userProfile;
+  bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
+    _loadProfile();
   }
 
   @override
@@ -24,9 +32,55 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
     super.dispose();
   }
 
+  Future<void> _loadProfile() async {
+    final user = _authService.currentUser;
+    final accessToken = _authService.accessToken;
+
+    if (user == null || accessToken == null) {
+      setState(() => _isLoading = false);
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    final result = await _profileRepository.getProfile(user.userId, accessToken: accessToken);
+
+    if (mounted) {
+      setState(() {
+        _isLoading = false;
+        if (result.success) {
+          _userProfile = result.profile;
+        }
+      });
+    }
+  }
+
+  Future<void> _navigateToEditProfile() async {
+    final result = await Navigator.push<UserProfile>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => EditProfilePage(existingProfile: _userProfile),
+      ),
+    );
+
+    if (result != null) {
+      setState(() {
+        _userProfile = result;
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    var currentUser = _authService.currentUser;
+    final currentUser = _authService.currentUser;
+
+    if (currentUser == null) {
+      return const Scaffold(
+        body: Center(
+          child: Text('Please log in to view your profile'),
+        ),
+      );
+    }
 
     return Scaffold(
       body: CustomScrollView(
@@ -38,68 +92,89 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
             actions: [
               IconButton(
                 icon: const Icon(Icons.settings_outlined),
-                onPressed: () {
-                  _showSettingsSheet();
-                },
+                onPressed: _showSettingsSheet,
               ),
             ],
             flexibleSpace: FlexibleSpaceBar(
               background: Container(
-                decoration: BoxDecoration(
+                decoration: const BoxDecoration(
                   gradient: LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
                     colors: [
-                      Theme.of(context).colorScheme.primary,
-                      Theme.of(context).colorScheme.primaryContainer,
+                      Color(0xFF7ED321),
+                      Color(0xFF9AE64A),
                     ],
                   ),
                 ),
                 child: SafeArea(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const SizedBox(height: 20),
-                      CircleAvatar(
-                        radius: 50,
-                        backgroundColor: Colors.white,
-                        child: Text(
-                          currentUser?.fullName[0].toUpperCase() ?? 'U',
-                          style: TextStyle(
-                            fontSize: 40,
-                            fontWeight: FontWeight.bold,
-                            color: Theme.of(context).colorScheme.primary,
-                          ),
+                  child: _isLoading
+                      ? const Center(child: CircularProgressIndicator(color: Colors.white))
+                      : Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const SizedBox(height: 20),
+                            CircleAvatar(
+                              radius: 50,
+                              backgroundColor: Colors.white,
+                              child: Text(
+                                _userProfile?.firstName?.isNotEmpty == true
+                                    ? _userProfile!.firstName![0].toUpperCase()
+                                    : currentUser.username[0].toUpperCase(),
+                                style: const TextStyle(
+                                  fontSize: 40,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF7ED321),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              _userProfile?.fullName.isNotEmpty == true
+                                  ? _userProfile!.fullName
+                                  : currentUser.username,
+                              style: const TextStyle(
+                                fontSize: 24,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
+                            Text(
+                              '@${currentUser.username}',
+                              style: const TextStyle(
+                                fontSize: 16,
+                                color: Colors.white70,
+                              ),
+                            ),
+                            if (_userProfile?.expertLevel != null) ...[
+                              const SizedBox(height: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: Colors.white24,
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Text(
+                                  _userProfile!.expertLevel!,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ),
+                            ],
+                            const SizedBox(height: 20),
+                            // Stats row (empty state shows 0s)
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                              children: [
+                                _buildStatColumn('Runs', '0'),
+                                _buildStatColumn('Distance', '0 km'),
+                                _buildStatColumn('Streak', '0 days'),
+                              ],
+                            ),
+                          ],
                         ),
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        currentUser?.fullName ?? 'User',
-                        style: const TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
-                      ),
-                      Text(
-                        '@${currentUser?.username ?? 'username'}',
-                        style: const TextStyle(
-                          fontSize: 16,
-                          color: Colors.white70,
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                      // Stats row
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        children: [
-                          _buildStatColumn('Runs', '42'),
-                          _buildStatColumn('Distance', '215 km'),
-                          _buildStatColumn('Streak', '7 days'),
-                        ],
-                      ),
-                    ],
-                  ),
                 ),
               ),
             ),
@@ -122,16 +197,67 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
 
           // Tab content
           SliverFillRemaining(
-            child: TabBarView(
-              controller: _tabController,
-              children: [
-                _buildRunsTab(),
-                _buildStatsTab(),
-                _buildAwardsTab(),
-              ],
-            ),
+            child: _userProfile == null && !_isLoading
+                ? _buildNoProfileState()
+                : TabBarView(
+                    controller: _tabController,
+                    children: [
+                      _buildRunsTab(),
+                      _buildStatsTab(),
+                      _buildAwardsTab(),
+                    ],
+                  ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildNoProfileState() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.person_add_outlined,
+              size: 80,
+              color: Colors.grey[400],
+            ),
+            const SizedBox(height: 24),
+            const Text(
+              'Complete Your Profile',
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Add your personal information to get started with RunWithMe',
+              style: TextStyle(
+                fontSize: 16,
+                color: Colors.grey[600],
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 32),
+            ElevatedButton.icon(
+              onPressed: _navigateToEditProfile,
+              icon: const Icon(Icons.edit),
+              label: const Text('Create Profile'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF7ED321),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -160,278 +286,87 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
   }
 
   Widget _buildRunsTab() {
-    var runs = [
-      RunRecord(
-        date: '2024-01-15',
-        routeName: 'Morning Run',
-        distance: 5.2,
-        duration: '28:36',
-        pace: '5:30',
-      ),
-      RunRecord(
-        date: '2024-01-14',
-        routeName: 'Evening Jog',
-        distance: 3.5,
-        duration: '21:00',
-        pace: '6:00',
-      ),
-      RunRecord(
-        date: '2024-01-13',
-        routeName: 'Trail Run',
-        distance: 8.0,
-        duration: '52:00',
-        pace: '6:30',
-      ),
-    ];
-
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: runs.length,
-      itemBuilder: (context, index) {
-        return _buildRunCard(runs[index]);
+    return _buildEmptyState(
+      icon: Icons.directions_run,
+      title: 'No Runs Yet',
+      message: 'Start tracking your runs to see them here',
+      actionLabel: 'Start a Run',
+      onAction: () {
+        // Navigate to map page to start a run
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Run tracking coming soon!')),
+        );
       },
-    );
-  }
-
-  Widget _buildRunCard(RunRecord run) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      elevation: 2,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  run.routeName,
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                Text(
-                  run.date,
-                  style: TextStyle(
-                    color: Colors.grey[600],
-                    fontSize: 13,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _buildRunStat(Icons.route, '${run.distance} km'),
-                _buildRunStat(Icons.timer, run.duration),
-                _buildRunStat(Icons.speed, '${run.pace} /km'),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildRunStat(IconData icon, String value) {
-    return Row(
-      children: [
-        Icon(icon, size: 16, color: Colors.grey[600]),
-        const SizedBox(width: 4),
-        Text(value, style: const TextStyle(fontSize: 14)),
-      ],
     );
   }
 
   Widget _buildStatsTab() {
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        _buildStatCard(
-          'This Week',
-          [
-            StatItem('Total Distance', '25.3 km'),
-            StatItem('Total Runs', '5'),
-            StatItem('Avg Pace', '5:45 /km'),
-            StatItem('Total Time', '2h 25m'),
-          ],
-        ),
-        const SizedBox(height: 16),
-        _buildStatCard(
-          'This Month',
-          [
-            StatItem('Total Distance', '102.5 km'),
-            StatItem('Total Runs', '18'),
-            StatItem('Avg Pace', '5:52 /km'),
-            StatItem('Total Time', '10h 15m'),
-          ],
-        ),
-        const SizedBox(height: 16),
-        _buildStatCard(
-          'All Time',
-          [
-            StatItem('Total Distance', '1,234 km'),
-            StatItem('Total Runs', '156'),
-            StatItem('Best Pace', '4:30 /km'),
-            StatItem('Longest Run', '21.1 km'),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildStatCard(String title, List<StatItem> items) {
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              title,
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 16),
-            ...items.map((item) => Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    item.label,
-                    style: TextStyle(
-                      color: Colors.grey[700],
-                      fontSize: 15,
-                    ),
-                  ),
-                  Text(
-                    item.value,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 15,
-                    ),
-                  ),
-                ],
-              ),
-            )),
-          ],
-        ),
-      ),
+    return _buildEmptyState(
+      icon: Icons.bar_chart,
+      title: 'No Statistics Yet',
+      message: 'Complete your first run to see your stats',
     );
   }
 
   Widget _buildAwardsTab() {
-    var awards = [
-      Award(
-        name: 'First Run',
-        description: 'Complete your first run',
-        icon: Icons.emoji_events,
-        unlocked: true,
-      ),
-      Award(
-        name: '100km Club',
-        description: 'Run a total of 100km',
-        icon: Icons.military_tech,
-        unlocked: true,
-      ),
-      Award(
-        name: 'Early Bird',
-        description: 'Complete 10 morning runs',
-        icon: Icons.wb_sunny,
-        unlocked: true,
-      ),
-      Award(
-        name: 'Marathon Ready',
-        description: 'Complete a 42km run',
-        icon: Icons.workspace_premium,
-        unlocked: false,
-      ),
-      Award(
-        name: 'Speed Demon',
-        description: 'Achieve sub-4:00 /km pace',
-        icon: Icons.bolt,
-        unlocked: false,
-      ),
-    ];
-
-    return GridView.builder(
-      padding: const EdgeInsets.all(16),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        crossAxisSpacing: 12,
-        mainAxisSpacing: 12,
-        childAspectRatio: 0.85,
-      ),
-      itemCount: awards.length,
-      itemBuilder: (context, index) {
-        return _buildAwardCard(awards[index]);
-      },
+    return _buildEmptyState(
+      icon: Icons.emoji_events,
+      title: 'No Awards Yet',
+      message: 'Earn awards by completing runs and achieving milestones',
     );
   }
 
-  Widget _buildAwardCard(Award award) {
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-          gradient: award.unlocked
-              ? LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    Colors.amber[100]!,
-                    Colors.amber[50]!,
-                  ],
-                )
-              : null,
-        ),
+  Widget _buildEmptyState({
+    required IconData icon,
+    required String title,
+    required String message,
+    String? actionLabel,
+    VoidCallback? onAction,
+  }) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32.0),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
-              award.icon,
-              size: 48,
-              color: award.unlocked ? Colors.amber[700] : Colors.grey[400],
+              icon,
+              size: 80,
+              color: Colors.grey[300],
+            ),
+            const SizedBox(height: 24),
+            Text(
+              title,
+              style: const TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: Colors.black87,
+              ),
             ),
             const SizedBox(height: 12),
             Text(
-              award.name,
+              message,
               style: TextStyle(
-                fontWeight: FontWeight.bold,
                 fontSize: 16,
-                color: award.unlocked ? Colors.black87 : Colors.grey[600],
+                color: Colors.grey[600],
               ),
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 6),
-            Text(
-              award.description,
-              style: TextStyle(
-                fontSize: 12,
-                color: award.unlocked ? Colors.black54 : Colors.grey[500],
+            if (actionLabel != null && onAction != null) ...[
+              const SizedBox(height: 24),
+              ElevatedButton(
+                onPressed: onAction,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF7ED321),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: Text(actionLabel),
               ),
-              textAlign: TextAlign.center,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
+            ],
           ],
         ),
       ),
@@ -463,6 +398,7 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
                 title: const Text('Edit Profile'),
                 onTap: () {
                   Navigator.pop(context);
+                  _navigateToEditProfile();
                 },
               ),
               ListTile(
@@ -470,6 +406,9 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
                 title: const Text('Privacy Settings'),
                 onTap: () {
                   Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Privacy settings coming soon')),
+                  );
                 },
               ),
               ListTile(
@@ -477,6 +416,9 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
                 title: const Text('Notifications'),
                 onTap: () {
                   Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Notification settings coming soon')),
+                  );
                 },
               ),
               const Divider(),
@@ -486,9 +428,7 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
                   'Logout',
                   style: TextStyle(color: Colors.red),
                 ),
-                onTap: () {
-                  _handleLogout();
-                },
+                onTap: _handleLogout,
               ),
               const SizedBox(height: 20),
             ],
@@ -531,42 +471,4 @@ class _SliverTabBarDelegate extends SliverPersistentHeaderDelegate {
   bool shouldRebuild(_SliverTabBarDelegate oldDelegate) {
     return false;
   }
-}
-
-// Models
-class RunRecord {
-  final String date;
-  final String routeName;
-  final double distance;
-  final String duration;
-  final String pace;
-
-  RunRecord({
-    required this.date,
-    required this.routeName,
-    required this.distance,
-    required this.duration,
-    required this.pace,
-  });
-}
-
-class StatItem {
-  final String label;
-  final String value;
-
-  StatItem(this.label, this.value);
-}
-
-class Award {
-  final String name;
-  final String description;
-  final IconData icon;
-  final bool unlocked;
-
-  Award({
-    required this.name,
-    required this.description,
-    required this.icon,
-    required this.unlocked,
-  });
 }

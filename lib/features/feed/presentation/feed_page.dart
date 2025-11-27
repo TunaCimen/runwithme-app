@@ -11,34 +11,8 @@ class FeedPage extends StatefulWidget {
 class _FeedPageState extends State<FeedPage> with SingleTickerProviderStateMixin {
   late TabController _tabController;
 
-  final List<FeedPost> _posts = [
-    FeedPost(
-      username: 'sarahjohnson',
-      fullName: 'Sarah Johnson',
-      location: 'Central Park, NYC',
-      timeAgo: '2h ago',
-      description: 'Beautiful morning run! The weather was perfect and I beat my personal record 🎉',
-      distance: 5.2,
-      pace: '5\'32"',
-      duration: '28:45',
-      likes: 124,
-      comments: 18,
-      imageUrl: null,
-    ),
-    FeedPost(
-      username: 'marcuschen',
-      fullName: 'Marcus Chen',
-      location: 'Golden Gate Park',
-      timeAgo: '5h ago',
-      description: 'Long run today preparing for the marathon.',
-      distance: 15.8,
-      pace: '6\'12"',
-      duration: '1:38:24',
-      likes: 89,
-      comments: 12,
-      imageUrl: null,
-    ),
-  ];
+  // Empty list for new users - will be populated from backend later
+  final List<FeedPost> _posts = [];
 
   @override
   void initState() {
@@ -155,6 +129,10 @@ class _FeedPageState extends State<FeedPage> with SingleTickerProviderStateMixin
   }
 
   Widget _buildPostsTab() {
+    if (_posts.isEmpty) {
+      return _buildEmptyFeedState();
+    }
+
     return RefreshIndicator(
       onRefresh: _refreshFeed,
       child: ListView.builder(
@@ -163,6 +141,61 @@ class _FeedPageState extends State<FeedPage> with SingleTickerProviderStateMixin
         itemBuilder: (context, index) {
           return _buildPostCard(_posts[index]);
         },
+      ),
+    );
+  }
+
+  Widget _buildEmptyFeedState() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.fitness_center,
+              size: 80,
+              color: Colors.grey[300],
+            ),
+            const SizedBox(height: 24),
+            const Text(
+              'No Posts Yet',
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: Colors.black87,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Start following other runners or complete your first run to see posts in your feed',
+              style: TextStyle(
+                fontSize: 16,
+                color: Colors.grey[600],
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 32),
+            ElevatedButton.icon(
+              onPressed: () {
+                // Navigate to map or search
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Find runners feature coming soon!')),
+                );
+              },
+              icon: const Icon(Icons.search),
+              label: const Text('Find Runners'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF7ED321),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

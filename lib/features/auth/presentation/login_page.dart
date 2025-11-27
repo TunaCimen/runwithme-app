@@ -45,23 +45,6 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
-  Future<void> _handleSocialLogin(String provider) async {
-    setState(() => _isLoading = true);
-
-    final result = provider == 'google'
-        ? await _authService.signInWithGoogle()
-        : await _authService.signInWithApple();
-
-    if (!mounted) return;
-    setState(() => _isLoading = false);
-
-    if (result.success) {
-      Navigator.of(context).pushReplacementNamed('/home');
-    } else {
-      _showErrorSnackBar(result.message);
-    }
-  }
-
   void _showErrorSnackBar(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -385,73 +368,6 @@ class _LoginPageState extends State<LoginPage> {
                   ),
                 ),
                 const SizedBox(height: 32),
-
-                // Divider
-                Row(
-                  children: [
-                    Expanded(child: Divider(color: Colors.grey[300])),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Text(
-                        'Or continue with',
-                        style: TextStyle(
-                          color: Colors.grey[600],
-                          fontSize: 14,
-                        ),
-                      ),
-                    ),
-                    Expanded(child: Divider(color: Colors.grey[300])),
-                  ],
-                ),
-                const SizedBox(height: 24),
-
-                // Social login buttons
-                SizedBox(
-                  width: double.infinity,
-                  height: 54,
-                  child: OutlinedButton.icon(
-                    onPressed: _isLoading ? null : () => _handleSocialLogin('apple'),
-                    icon: const Icon(Icons.apple, size: 24, color: Colors.black87),
-                    label: const Text(
-                      'Continue with Apple',
-                      style: TextStyle(
-                        fontSize: 16,
-                        color: Colors.black87,
-                      ),
-                    ),
-                    style: OutlinedButton.styleFrom(
-                      backgroundColor: Colors.white,
-                      side: BorderSide(color: Colors.grey[300]!),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                SizedBox(
-                  width: double.infinity,
-                  height: 54,
-                  child: OutlinedButton.icon(
-                    onPressed: _isLoading ? null : () => _handleSocialLogin('google'),
-                    icon: const Icon(Icons.email_outlined, size: 20, color: Colors.black87),
-                    label: const Text(
-                      'Continue with Google',
-                      style: TextStyle(
-                        fontSize: 16,
-                        color: Colors.black87,
-                      ),
-                    ),
-                    style: OutlinedButton.styleFrom(
-                      backgroundColor: Colors.white,
-                      side: BorderSide(color: Colors.grey[300]!),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 24),
 
                 // Terms and privacy
                 RichText(

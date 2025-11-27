@@ -50,27 +50,10 @@ class _SignUpPageState extends State<SignUpPage> {
       // Show success message and navigate to main app
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Welcome, ${result.user?.fullName}!'),
+          content: Text('Welcome, ${result.user?.username}!'),
           backgroundColor: Colors.green,
         ),
       );
-      Navigator.of(context).pushReplacementNamed('/home');
-    } else {
-      _showErrorDialog(result.message);
-    }
-  }
-
-  Future<void> _handleSocialSignUp(String provider) async {
-    setState(() => _isLoading = true);
-
-    final result = provider == 'google'
-        ? await _authService.signInWithGoogle()
-        : await _authService.signInWithApple();
-
-    if (!mounted) return;
-    setState(() => _isLoading = false);
-
-    if (result.success) {
       Navigator.of(context).pushReplacementNamed('/home');
     } else {
       _showErrorDialog(result.message);
@@ -312,48 +295,6 @@ class _SignUpPageState extends State<SignUpPage> {
                             'Create Account',
                             style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                           ),
-                  ),
-                  const SizedBox(height: 24),
-
-                  // Divider
-                  Row(
-                    children: [
-                      Expanded(child: Divider(color: Colors.grey[300])),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: Text(
-                          'OR',
-                          style: TextStyle(color: Colors.grey[600]),
-                        ),
-                      ),
-                      Expanded(child: Divider(color: Colors.grey[300])),
-                    ],
-                  ),
-                  const SizedBox(height: 24),
-
-                  // Social Sign Up Buttons
-                  OutlinedButton.icon(
-                    onPressed: _isLoading ? null : () => _handleSocialSignUp('google'),
-                    icon: const Icon(Icons.g_mobiledata, size: 28),
-                    label: const Text('Continue with Google'),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  OutlinedButton.icon(
-                    onPressed: _isLoading ? null : () => _handleSocialSignUp('apple'),
-                    icon: const Icon(Icons.apple, size: 24),
-                    label: const Text('Continue with Apple'),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
                   ),
                   const SizedBox(height: 24),
 
