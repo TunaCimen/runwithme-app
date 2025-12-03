@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import '../../../core/models/user_profile.dart';
 import '../../auth/data/auth_service.dart';
 import '../data/profile_repository.dart';
+import '../../map/data/route_repository.dart';
 import 'edit_profile_page.dart';
+import 'saved_routes_tab.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -15,6 +17,7 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
   late TabController _tabController;
   final _authService = AuthService();
   final _profileRepository = ProfileRepository();
+  final _routeRepository = RouteRepository();
 
   UserProfile? _userProfile;
   bool _isLoading = true;
@@ -22,7 +25,7 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
     _loadProfile();
   }
 
@@ -113,28 +116,28 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
                       : Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            const SizedBox(height: 20),
+                            const SizedBox(height: 10),
                             CircleAvatar(
-                              radius: 50,
+                              radius: 45,
                               backgroundColor: Colors.white,
                               child: Text(
                                 _userProfile?.firstName?.isNotEmpty == true
                                     ? _userProfile!.firstName![0].toUpperCase()
                                     : currentUser.username[0].toUpperCase(),
                                 style: const TextStyle(
-                                  fontSize: 40,
+                                  fontSize: 36,
                                   fontWeight: FontWeight.bold,
                                   color: Color(0xFF7ED321),
                                 ),
                               ),
                             ),
-                            const SizedBox(height: 12),
+                            const SizedBox(height: 8),
                             Text(
                               _userProfile?.fullName.isNotEmpty == true
                                   ? _userProfile!.fullName
                                   : currentUser.username,
                               style: const TextStyle(
-                                fontSize: 24,
+                                fontSize: 22,
                                 fontWeight: FontWeight.bold,
                                 color: Colors.white,
                               ),
@@ -142,14 +145,14 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
                             Text(
                               '@${currentUser.username}',
                               style: const TextStyle(
-                                fontSize: 16,
+                                fontSize: 14,
                                 color: Colors.white70,
                               ),
                             ),
                             if (_userProfile?.expertLevel != null) ...[
-                              const SizedBox(height: 8),
+                              const SizedBox(height: 6),
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
                                 decoration: BoxDecoration(
                                   color: Colors.white24,
                                   borderRadius: BorderRadius.circular(12),
@@ -158,12 +161,12 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
                                   _userProfile!.expertLevel!,
                                   style: const TextStyle(
                                     color: Colors.white,
-                                    fontSize: 14,
+                                    fontSize: 12,
                                   ),
                                 ),
                               ),
                             ],
-                            const SizedBox(height: 20),
+                            const SizedBox(height: 12),
                             // Stats row (empty state shows 0s)
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -187,9 +190,10 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
               TabBar(
                 controller: _tabController,
                 tabs: const [
-                  Tab(text: 'Runs'),
-                  Tab(text: 'Stats'),
-                  Tab(text: 'Awards'),
+                  Tab(icon: Icon(Icons.directions_run), text: 'Runs'),
+                  Tab(icon: Icon(Icons.bar_chart), text: 'Stats'),
+                  Tab(icon: Icon(Icons.emoji_events), text: 'Awards'),
+                  Tab(icon: Icon(Icons.favorite), text: 'Saved'),
                 ],
               ),
             ),
@@ -205,6 +209,10 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
                       _buildRunsTab(),
                       _buildStatsTab(),
                       _buildAwardsTab(),
+                      SavedRoutesTab(
+                        authService: _authService,
+                        routeRepository: _routeRepository,
+                      ),
                     ],
                   ),
           ),

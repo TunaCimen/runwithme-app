@@ -4,69 +4,93 @@ import 'package:latlong2/latlong.dart';
 import '../../../core/models/route.dart' as route_model;
 import '../../auth/data/auth_service.dart';
 import '../../map/data/route_repository.dart';
+import 'edit_route_page.dart';
 
 typedef RunRoute = route_model.Route;
 
-class MatchesTab extends StatefulWidget {
-  const MatchesTab({super.key});
+class SavedRoutesTab extends StatefulWidget {
+  final AuthService authService;
+  final RouteRepository routeRepository;
+
+  const SavedRoutesTab({
+    super.key,
+    required this.authService,
+    required this.routeRepository,
+  });
 
   @override
-  State<MatchesTab> createState() => _MatchesTabState();
+  State<SavedRoutesTab> createState() => _SavedRoutesTabState();
 }
 
-class _MatchesTabState extends State<MatchesTab> {
-  final RouteRepository _routeRepository = RouteRepository();
-  final AuthService _authService = AuthService();
-
-  List<RunRoute> _publicRoutes = [];
+class _SavedRoutesTabState extends State<SavedRoutesTab> {
+  List<RunRoute> _savedRoutes = [];
   bool _isLoading = true;
   String? _errorMessage;
 
   @override
   void initState() {
     super.initState();
-    _loadPublicRoutes();
+    _loadSavedRoutes();
   }
 
-  Future<void> _loadPublicRoutes() async {
+  Future<void> _loadSavedRoutes() async {
+    final user = widget.authService.currentUser;
+    final accessToken = widget.authService.accessToken;
+
+    if (user == null || accessToken == null) {
+      setState(() {
+        _isLoading = false;
+        _errorMessage = 'Please log in to view saved routes';
+      });
+      return;
+    }
+
     setState(() {
       _isLoading = true;
       _errorMessage = null;
     });
 
-    final result = await _routeRepository.getPublicRoutes(
-      page: 0,
-      size: 50,
-      accessToken: _authService.accessToken,
-    );
+    try {
+      // Get the user's liked routes using the repository method
+      final routes = await widget.routeRepository.getUserLikedRoutes(
+        userId: user.userId,
+        page: 0,
+        size: 50,
+        accessToken: accessToken,
+      );
 
-    if (mounted) {
-      setState(() {
-        _isLoading = false;
-        if (result.success && result.routes != null) {
-          // Sort by created date (newest first)
-          _publicRoutes = result.routes!;
-          _publicRoutes.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-        } else {
-          _errorMessage = result.message ?? 'Failed to load routes';
-        }
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _savedRoutes = routes;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _errorMessage = 'Failed to load saved routes: $e';
+        });
+      }
     }
   }
 
-  Future<void> _joinRoute(RunRoute route) async {
-    // TODO: Implement join route functionality
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Joining route: ${route.title ?? "Untitled Route"}'),
-        action: SnackBarAction(
-          label: 'View',
-          onPressed: () {
-            // Navigate to map with this route
-          },
+  Future<void> _editRoute(RunRoute route) async {
+    final updatedRoute = await Navigator.push<RunRoute>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => EditRoutePage(
+          route: route,
+          authService: widget.authService,
+          routeRepository: widget.routeRepository,
         ),
       ),
     );
+
+    if (updatedRoute != null) {
+      // Refresh the list
+      await _loadSavedRoutes();
+    }
   }
 
   @override
@@ -100,7 +124,7 @@ class _MatchesTabState extends State<MatchesTab> {
               ),
               const SizedBox(height: 24),
               ElevatedButton(
-                onPressed: _loadPublicRoutes,
+                onPressed: _loadSavedRoutes,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF7ED321),
                   foregroundColor: Colors.white,
@@ -113,53 +137,18 @@ class _MatchesTabState extends State<MatchesTab> {
       );
     }
 
-    if (_publicRoutes.isEmpty) {
+    if (_savedRoutes.isEmpty) {
       return _buildEmptyState();
     }
 
     return RefreshIndicator(
-      onRefresh: _loadPublicRoutes,
-      child: ListView(
+      onRefresh: _loadSavedRoutes,
+      child: ListView.builder(
         padding: const EdgeInsets.all(16),
-        children: [
-          // Info card
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF0FCD9),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: const Color(0xFF7ED321).withValues(alpha: 0.3)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Discover Running Routes',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Explore ${_publicRoutes.length} public routes shared by the community',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.grey[700],
-                    height: 1.4,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 20),
-
-          // Route cards
-          ..._publicRoutes.map((route) => Padding(
-                padding: const EdgeInsets.only(bottom: 16),
-                child: _buildRouteCard(route),
-              )),
-        ],
+        itemCount: _savedRoutes.length,
+        itemBuilder: (context, index) {
+          return _buildRouteCard(_savedRoutes[index]);
+        },
       ),
     );
   }
@@ -172,13 +161,13 @@ class _MatchesTabState extends State<MatchesTab> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
-              Icons.route,
+              Icons.favorite_border,
               size: 80,
               color: Colors.grey[300],
             ),
             const SizedBox(height: 24),
             const Text(
-              'No Routes Yet',
+              'No Saved Routes',
               style: TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
@@ -187,12 +176,29 @@ class _MatchesTabState extends State<MatchesTab> {
             ),
             const SizedBox(height: 12),
             Text(
-              'Be the first to share a public route with the community',
+              'Routes you like will appear here',
               style: TextStyle(
                 fontSize: 16,
                 color: Colors.grey[600],
               ),
               textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: () {
+                // Navigate to map page
+                DefaultTabController.of(context).animateTo(1); // Switch to map tab
+              },
+              icon: const Icon(Icons.explore),
+              label: const Text('Explore Routes'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF7ED321),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
             ),
           ],
         ),
@@ -202,6 +208,7 @@ class _MatchesTabState extends State<MatchesTab> {
 
   Widget _buildRouteCard(RunRoute route) {
     return Container(
+      margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
@@ -221,11 +228,11 @@ class _MatchesTabState extends State<MatchesTab> {
           ClipRRect(
             borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
             child: SizedBox(
-              height: 180,
+              height: 200,
               child: FlutterMap(
                 options: MapOptions(
                   initialCenter: LatLng(route.startPointLat, route.startPointLon),
-                  initialZoom: 13.0,
+                  initialZoom: 14.0,
                   interactionOptions: const InteractionOptions(
                     flags: InteractiveFlag.none, // Disable interactions
                   ),
@@ -251,27 +258,27 @@ class _MatchesTabState extends State<MatchesTab> {
                       // Start marker
                       Marker(
                         point: LatLng(route.startPointLat, route.startPointLon),
-                        width: 25,
-                        height: 25,
+                        width: 30,
+                        height: 30,
                         child: Container(
                           decoration: const BoxDecoration(
                             color: Colors.green,
                             shape: BoxShape.circle,
                           ),
-                          child: const Icon(Icons.play_arrow, color: Colors.white, size: 14),
+                          child: const Icon(Icons.play_arrow, color: Colors.white, size: 16),
                         ),
                       ),
                       // End marker
                       Marker(
                         point: LatLng(route.endPointLat, route.endPointLon),
-                        width: 25,
-                        height: 25,
+                        width: 30,
+                        height: 30,
                         child: Container(
                           decoration: const BoxDecoration(
                             color: Colors.red,
                             shape: BoxShape.circle,
                           ),
-                          child: const Icon(Icons.stop, color: Colors.white, size: 14),
+                          child: const Icon(Icons.stop, color: Colors.white, size: 16),
                         ),
                       ),
                     ],
@@ -333,76 +340,71 @@ class _MatchesTabState extends State<MatchesTab> {
                       ),
                   ],
                 ),
-                const SizedBox(height: 12),
-
-                // Time ago
-                Row(
-                  children: [
-                    Icon(Icons.access_time, size: 14, color: Colors.grey[600]),
-                    const SizedBox(width: 4),
-                    Text(
-                      _getTimeAgo(route.createdAt),
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: Colors.grey[600],
-                      ),
-                    ),
-                  ],
-                ),
                 const SizedBox(height: 16),
 
                 // Stats
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: [
-                    _buildStatColumn(
+                    _buildStatItem(
                       icon: Icons.straighten,
                       value: route.formattedDistance,
                       label: 'Distance',
                     ),
-                    _buildStatColumn(
+                    _buildStatItem(
                       icon: Icons.timer,
                       value: route.formattedDuration,
                       label: 'Duration',
                     ),
-                    _buildStatColumn(
-                      icon: Icons.route,
-                      value: '${route.points.length}',
-                      label: 'Points',
+                    _buildStatItem(
+                      icon: Icons.visibility,
+                      value: route.isPublic ? 'Public' : 'Private',
+                      label: 'Visibility',
                     ),
                   ],
                 ),
                 const SizedBox(height: 16),
 
-                // Join button
-                SizedBox(
-                  width: double.infinity,
-                  height: 50,
-                  child: ElevatedButton(
-                    onPressed: () => _joinRoute(route),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF7ED321),
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: const Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.directions_run),
-                        SizedBox(width: 8),
-                        Text(
-                          'Join This Route',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
+                // Action buttons
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () => _editRoute(route),
+                        icon: const Icon(Icons.edit),
+                        label: const Text('Edit'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: const Color(0xFF7ED321),
+                          side: const BorderSide(color: Color(0xFF7ED321)),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
                           ),
                         ),
-                      ],
+                      ),
                     ),
-                  ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          // TODO: Navigate to route details or start navigation
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Navigation coming soon!')),
+                          );
+                        },
+                        icon: const Icon(Icons.directions),
+                        label: const Text('Navigate'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF7ED321),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -412,15 +414,15 @@ class _MatchesTabState extends State<MatchesTab> {
     );
   }
 
-  Widget _buildStatColumn({
+  Widget _buildStatItem({
     required IconData icon,
     required String value,
     required String label,
   }) {
     return Column(
       children: [
-        Icon(icon, size: 18, color: Colors.grey[700]),
-        const SizedBox(height: 6),
+        Icon(icon, size: 20, color: Colors.grey[700]),
+        const SizedBox(height: 4),
         Text(
           value,
           style: const TextStyle(
@@ -452,27 +454,6 @@ class _MatchesTabState extends State<MatchesTab> {
         return Colors.purple;
       default:
         return Colors.grey;
-    }
-  }
-
-  String _getTimeAgo(DateTime dateTime) {
-    final now = DateTime.now();
-    final difference = now.difference(dateTime);
-
-    if (difference.inDays > 365) {
-      final years = (difference.inDays / 365).floor();
-      return '${years}y ago';
-    } else if (difference.inDays > 30) {
-      final months = (difference.inDays / 30).floor();
-      return '${months}mo ago';
-    } else if (difference.inDays > 0) {
-      return '${difference.inDays}d ago';
-    } else if (difference.inHours > 0) {
-      return '${difference.inHours}h ago';
-    } else if (difference.inMinutes > 0) {
-      return '${difference.inMinutes}m ago';
-    } else {
-      return 'Just now';
     }
   }
 }

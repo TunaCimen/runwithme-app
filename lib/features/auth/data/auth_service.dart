@@ -1,9 +1,12 @@
 // Authentication service using the new repository layer
 import '../../../core/models/user.dart';
+import '../../../core/models/user_profile.dart';
 import 'auth_repository.dart';
+import '../../profile/data/profile_repository.dart';
 
 class AuthService {
   final AuthRepository _repository;
+  final ProfileRepository _profileRepository;
 
   static String? _accessToken;
   static String? _refreshToken;
@@ -12,7 +15,9 @@ class AuthService {
   AuthService({
     String baseUrl = 'http://35.158.35.102:8080',
     AuthRepository? repository,
-  }) : _repository = repository ?? AuthRepository(baseUrl: baseUrl);
+    ProfileRepository? profileRepository,
+  }) : _repository = repository ?? AuthRepository(baseUrl: baseUrl),
+       _profileRepository = profileRepository ?? ProfileRepository();
 
   // Login using the repository
   Future<AuthResult> login({
@@ -50,6 +55,30 @@ class AuthService {
       _accessToken = result.accessToken;
       _refreshToken = result.refreshToken;
       _currentUser = result.user;
+
+      // Automatically create user profile with initial data
+      if (fullName != null && fullName.isNotEmpty && _accessToken != null) {
+        try {
+          // Split full name into first and last name
+          final nameParts = fullName.trim().split(' ');
+          final firstName = nameParts.isNotEmpty ? nameParts.first : '';
+          final lastName = nameParts.length > 1 ? nameParts.sublist(1).join(' ') : '';
+
+          final profile = UserProfile(
+            userId: result.user!.userId,
+            firstName: firstName.isNotEmpty ? firstName : null,
+            lastName: lastName.isNotEmpty ? lastName : null,
+          );
+
+          await _profileRepository.createProfile(
+            profile,
+            accessToken: _accessToken!,
+          );
+        } catch (e) {
+          // If profile creation fails, log but don't fail the registration
+          print('⚠️ [AUTH_SERVICE] Failed to create profile: $e');
+        }
+      }
     }
 
     return result;
