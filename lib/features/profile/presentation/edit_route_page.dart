@@ -59,19 +59,15 @@ class _EditRoutePageState extends State<EditRoutePage> {
       _isSaving = true;
     });
 
-    // Create updated route
-    final updatedRoute = widget.route.copyWith(
+    // Update only editable fields
+    final result = await widget.routeRepository.updateRouteFields(
+      routeId: widget.route.id,
       title: _titleController.text.trim().isEmpty ? null : _titleController.text.trim(),
       description: _descriptionController.text.trim().isEmpty
           ? null
           : _descriptionController.text.trim(),
       difficulty: _selectedDifficulty,
       isPublic: _isPublic,
-    );
-
-    // Call the update API
-    final result = await widget.routeRepository.updateRoute(
-      route: updatedRoute,
       accessToken: accessToken,
     );
 

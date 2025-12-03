@@ -231,8 +231,8 @@ class _SavedRoutesTabState extends State<SavedRoutesTab> {
               height: 200,
               child: FlutterMap(
                 options: MapOptions(
-                  initialCenter: LatLng(route.startPointLat, route.startPointLon),
-                  initialZoom: 14.0,
+                  initialCenter: _calculateRouteCenter(route),
+                  initialZoom: _calculateZoomLevel(route),
                   interactionOptions: const InteractionOptions(
                     flags: InteractiveFlag.none, // Disable interactions
                   ),
@@ -245,9 +245,13 @@ class _SavedRoutesTabState extends State<SavedRoutesTab> {
                   PolylineLayer(
                     polylines: [
                       Polyline(
-                        points: route.points
-                            .map((p) => LatLng(p.latitude, p.longitude))
-                            .toList(),
+                        // Use route points if available, otherwise draw line from start to end
+                        points: route.points.isNotEmpty
+                            ? route.points.map((p) => LatLng(p.latitude, p.longitude)).toList()
+                            : [
+                                LatLng(route.startPointLat, route.startPointLon),
+                                LatLng(route.endPointLat, route.endPointLon),
+                              ],
                         strokeWidth: 4.0,
                         color: const Color(0xFF7ED321),
                       ),
@@ -455,5 +459,75 @@ class _SavedRoutesTabState extends State<SavedRoutesTab> {
       default:
         return Colors.grey;
     }
+  }
+
+  /// Calculate the center point of a route to show both start and end
+  LatLng _calculateRouteCenter(RunRoute route) {
+    if (route.points.isEmpty) {
+      // Fallback to midpoint between start and end
+      return LatLng(
+        (route.startPointLat + route.endPointLat) / 2,
+        (route.startPointLon + route.endPointLon) / 2,
+      );
+    }
+
+    // Calculate center from all points
+    double minLat = route.points.first.latitude;
+    double maxLat = route.points.first.latitude;
+    double minLon = route.points.first.longitude;
+    double maxLon = route.points.first.longitude;
+
+    for (var point in route.points) {
+      if (point.latitude < minLat) minLat = point.latitude;
+      if (point.latitude > maxLat) maxLat = point.latitude;
+      if (point.longitude < minLon) minLon = point.longitude;
+      if (point.longitude > maxLon) maxLon = point.longitude;
+    }
+
+    return LatLng((minLat + maxLat) / 2, (minLon + maxLon) / 2);
+  }
+
+  /// Calculate appropriate zoom level to fit the entire route
+  double _calculateZoomLevel(RunRoute route) {
+    if (route.points.isEmpty) {
+      // Calculate from start/end points
+      final latDiff = (route.startPointLat - route.endPointLat).abs();
+      final lonDiff = (route.startPointLon - route.endPointLon).abs();
+      final maxDiff = latDiff > lonDiff ? latDiff : lonDiff;
+
+      if (maxDiff < 0.005) return 16.0;
+      if (maxDiff < 0.01) return 15.0;
+      if (maxDiff < 0.02) return 14.0;
+      if (maxDiff < 0.05) return 13.0;
+      if (maxDiff < 0.1) return 12.0;
+      if (maxDiff < 0.2) return 11.0;
+      return 10.0;
+    }
+
+    // Calculate from all points
+    double minLat = route.points.first.latitude;
+    double maxLat = route.points.first.latitude;
+    double minLon = route.points.first.longitude;
+    double maxLon = route.points.first.longitude;
+
+    for (var point in route.points) {
+      if (point.latitude < minLat) minLat = point.latitude;
+      if (point.latitude > maxLat) maxLat = point.latitude;
+      if (point.longitude < minLon) minLon = point.longitude;
+      if (point.longitude > maxLon) maxLon = point.longitude;
+    }
+
+    final latDiff = maxLat - minLat;
+    final lonDiff = maxLon - minLon;
+    final maxDiff = latDiff > lonDiff ? latDiff : lonDiff;
+
+    // Add padding by using slightly lower zoom
+    if (maxDiff < 0.005) return 15.0;
+    if (maxDiff < 0.01) return 14.0;
+    if (maxDiff < 0.02) return 13.0;
+    if (maxDiff < 0.05) return 12.0;
+    if (maxDiff < 0.1) return 11.0;
+    if (maxDiff < 0.2) return 10.0;
+    return 9.0;
   }
 }

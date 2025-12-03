@@ -106,7 +106,7 @@ class RouteApiClient extends BaseApiClient {
     return RouteDto.fromJson(response.data as Map<String, dynamic>);
   }
 
-  /// Update a route
+  /// Update a route (full replacement)
   Future<RouteDto> updateRoute({
     required int routeId,
     required RouteDto route,
@@ -117,6 +117,31 @@ class RouteApiClient extends BaseApiClient {
     final response = await dio.put(
       '/routes/$routeId',
       data: route.toJson(),
+    );
+
+    return RouteDto.fromJson(response.data as Map<String, dynamic>);
+  }
+
+  /// Update route with only editable fields (using PUT since PATCH is not supported)
+  Future<RouteDto> updateRouteFields({
+    required int routeId,
+    String? title,
+    String? description,
+    String? difficulty,
+    bool? isPublic,
+    required String accessToken,
+  }) async {
+    setAuthToken(accessToken);
+
+    final data = <String, dynamic>{};
+    if (title != null) data['title'] = title;
+    if (description != null) data['description'] = description;
+    if (difficulty != null) data['difficulty'] = difficulty;
+    if (isPublic != null) data['public'] = isPublic;
+
+    final response = await dio.put(
+      '/routes/$routeId',
+      data: data,
     );
 
     return RouteDto.fromJson(response.data as Map<String, dynamic>);
@@ -224,7 +249,20 @@ class RouteApiClient extends BaseApiClient {
     }
 
     final response = await dio.get('/route-likes/route/$routeId/count');
-    return (response.data as num).toInt();
+    final data = response.data;
+
+    // Handle different response formats
+    if (data is num) {
+      return data.toInt();
+    } else if (data is Map) {
+      // Try common field names for count
+      return (data['count'] as num?)?.toInt() ??
+             (data['likeCount'] as num?)?.toInt() ??
+             (data['total'] as num?)?.toInt() ?? 0;
+    } else if (data is String) {
+      return int.tryParse(data) ?? 0;
+    }
+    return 0;
   }
 
   /// Get likes for a route (paginated)
