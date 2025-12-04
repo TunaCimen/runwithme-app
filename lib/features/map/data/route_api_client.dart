@@ -289,7 +289,7 @@ class RouteApiClient extends BaseApiClient {
 
   /// Get user's liked routes (paginated)
   Future<PaginatedRouteLikeResponse> getUserLikedRoutes({
-    required int userId,
+    required String userId,
     int page = 0,
     int size = 10,
     String? accessToken,

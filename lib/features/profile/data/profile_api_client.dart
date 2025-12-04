@@ -22,7 +22,7 @@ class ProfileApiClient {
 
   /// Get user profile by user ID
   /// GET /api/v1/user-profiles/:id
-  Future<UserProfile> getUserProfile(int userId, {String? accessToken}) async {
+  Future<UserProfile> getUserProfile(String userId, {String? accessToken}) async {
     print('🔵 [PROFILE_API] GET /api/v1/user-profiles/$userId');
 
     final response = await _dio.get(
@@ -39,7 +39,7 @@ class ProfileApiClient {
   /// Update user profile
   /// PUT /api/v1/user-profiles/:id
   Future<UserProfile> updateUserProfile(
-    int userId,
+    String userId,
     UserProfile profile, {
     required String accessToken,
   }) async {
@@ -81,7 +81,7 @@ class ProfileApiClient {
 
   /// Upload profile picture
   Future<String> uploadProfilePicture(
-    int userId,
+    String userId,
     String filePath, {
     required String accessToken,
   }) async {

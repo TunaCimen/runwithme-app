@@ -343,7 +343,7 @@ class RouteRepository {
 
   /// Get user's liked routes
   Future<List<Route>> getUserLikedRoutes({
-    required int userId,
+    required String userId,
     int page = 0,
     int size = 50,
     required String accessToken,

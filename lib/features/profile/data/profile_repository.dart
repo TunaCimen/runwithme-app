@@ -12,7 +12,7 @@ class ProfileRepository {
   }) : _apiClient = apiClient ?? ProfileApiClient(baseUrl: baseUrl);
 
   /// Get user profile by user ID
-  Future<ProfileResult> getProfile(int userId, {required String accessToken}) async {
+  Future<ProfileResult> getProfile(String userId, {required String accessToken}) async {
     try {
       print('🔵 [PROFILE_REPO] Fetching profile for user: $userId');
 
@@ -68,7 +68,7 @@ class ProfileRepository {
 
   /// Upload profile picture
   Future<ProfilePictureResult> uploadProfilePicture(
-    int userId,
+    String userId,
     String filePath, {
     required String accessToken,
   }) async {

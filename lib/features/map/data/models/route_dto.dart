@@ -14,7 +14,7 @@ class RouteDto {
   final double? endPointLat;
   final double? endPointLon;
   final List<RoutePointDto>? points;
-  final int? creatorId;
+  final String? creatorId;
   final String? createdAt;
   final String? updatedAt;
 
@@ -58,7 +58,7 @@ class RouteDto {
       endPointLat: (json['endPointLat'] as num?)?.toDouble(),
       endPointLon: (json['endPointLon'] as num?)?.toDouble(),
       points: pointsList.isNotEmpty ? pointsList : null,
-      creatorId: (json['creatorId'] as num?)?.toInt(),
+      creatorId: json['creatorId'] as String?,
       createdAt: json['createdAt'] as String?,
       updatedAt: json['updatedAt'] as String?,
     );
@@ -122,7 +122,7 @@ class RouteDto {
       endPointLat: route.endPointLat,
       endPointLon: route.endPointLon,
       points: route.points.map((p) => RoutePointDto.fromModel(p)).toList(),
-      creatorId: route.creatorId == 0 ? null : route.creatorId,
+      creatorId: (route.creatorId == null || route.creatorId!.isEmpty) ? null : route.creatorId,
       createdAt: route.createdAt.toIso8601String(),
       updatedAt: route.updatedAt.toIso8601String(),
     );

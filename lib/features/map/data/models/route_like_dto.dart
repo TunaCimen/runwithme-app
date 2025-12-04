@@ -3,7 +3,7 @@ import '../../../../core/models/models.dart';
 /// DTO for route like API requests and responses
 class RouteLikeDto {
   final int? routeId;
-  final int? userId;
+  final String? userId;
   final String? createdAt;
 
   RouteLikeDto({
@@ -16,7 +16,7 @@ class RouteLikeDto {
   factory RouteLikeDto.fromJson(Map<String, dynamic> json) {
     return RouteLikeDto(
       routeId: (json['routeId'] as num?)?.toInt(),
-      userId: (json['userId'] as num?)?.toInt(),
+      userId: json['userId'] as String?,
       createdAt: json['createdAt'] as String?,
     );
   }

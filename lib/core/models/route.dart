@@ -15,7 +15,7 @@ class Route {
   final double endPointLat;
   final double endPointLon;
   final List<RoutePoint> points;
-  final int? creatorId;
+  final String? creatorId;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -68,8 +68,8 @@ class Route {
       endPointLon: (json['endPointLon'] as num?)?.toDouble() ??
                    (json['end_point_lon'] as num).toDouble(),
       points: pointsList,
-      creatorId: (json['creatorId'] as num?)?.toInt() ??
-                 (json['creator_id'] as num?)?.toInt(),
+      creatorId: json['creatorId'] as String? ??
+                 json['creator_id'] as String?,
       createdAt: DateTime.parse(json['createdAt'] as String? ??
                                 json['created_at'] as String),
       updatedAt: DateTime.parse(json['updatedAt'] as String? ??
@@ -131,7 +131,7 @@ class Route {
     double? endPointLat,
     double? endPointLon,
     List<RoutePoint>? points,
-    int? creatorId,
+    String? creatorId,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {

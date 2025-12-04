@@ -14,7 +14,7 @@ class UserViewModel {
     this.location,
   });
 
-  int get userId => user.userId;
+  String get userId => user.userId;
   String get username => user.username;
   String get email => user.email;
 

@@ -1,6 +1,6 @@
 /// User profile model matching the database schema
 class UserProfile {
-  final int userId;
+  final String userId;
   final String? firstName;
   final String? lastName;
   final String? pronouns;
@@ -34,7 +34,7 @@ class UserProfile {
 
   factory UserProfile.fromJson(Map<String, dynamic> json) {
     return UserProfile(
-      userId: (json['userId'] as num?)?.toInt() ?? (json['user_id'] as num).toInt(),
+      userId: json['userId'] as String? ?? json['user_id'] as String? ?? '',
       firstName: json['firstName'] as String? ?? json['first_name'] as String?,
       lastName: json['lastName'] as String? ?? json['last_name'] as String?,
       pronouns: json['pronouns'] as String?,
@@ -80,7 +80,7 @@ class UserProfile {
   }
 
   UserProfile copyWith({
-    int? userId,
+    String? userId,
     String? firstName,
     String? lastName,
     String? pronouns,

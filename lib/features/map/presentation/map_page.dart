@@ -445,7 +445,7 @@ class _MapPageState extends State<MapPage> {
               endPointLon: _pointB!.longitude,
               difficulty: _calculateDifficulty(distance.toDouble()),
               isPublic: true,
-              creatorId: 0, // Will be set when saving
+              creatorId: null, // Will be set when saving
               createdAt: DateTime.now(),
               updatedAt: DateTime.now(),
             );
