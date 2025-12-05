@@ -22,6 +22,10 @@ class _MatchesTabState extends State<MatchesTab> {
   bool _isLoading = true;
   String? _errorMessage;
 
+  // Like state
+  final Map<int, bool> _likedRoutes = {};
+  final Map<int, int> _likeCounts = {};
+
   @override
   void initState() {
     super.initState();
@@ -40,17 +44,105 @@ class _MatchesTabState extends State<MatchesTab> {
       accessToken: _authService.accessToken,
     );
 
-    if (mounted) {
-      setState(() {
-        _isLoading = false;
-        if (result.success && result.routes != null) {
+    if (result.success && result.routes != null) {
+      // Fetch full route details to get all points for proper visualization
+      final fullRoutes = await _routeRepository.fetchFullRouteDetails(
+        routes: result.routes!,
+        accessToken: _authService.accessToken,
+      );
+
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
           // Sort by created date (newest first)
-          _publicRoutes = result.routes!;
+          _publicRoutes = fullRoutes;
           _publicRoutes.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-        } else {
-          _errorMessage = result.message ?? 'Failed to load routes';
+        });
+
+        // Load like status for each route
+        for (var route in _publicRoutes) {
+          _loadLikeStatus(route.id);
         }
-      });
+      }
+    } else {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _errorMessage = result.message ?? 'Failed to load routes';
+        });
+      }
+    }
+  }
+
+  /// Load like status and count for a route
+  Future<void> _loadLikeStatus(int routeId) async {
+    if (_authService.accessToken == null) return;
+
+    try {
+      // Check if liked
+      final isLiked = await _routeRepository.checkIfLiked(
+        routeId: routeId,
+        accessToken: _authService.accessToken!,
+      );
+
+      // Get like count
+      final count = await _routeRepository.getLikeCount(
+        routeId: routeId,
+        accessToken: _authService.accessToken,
+      );
+
+      if (mounted) {
+        setState(() {
+          _likedRoutes[routeId] = isLiked;
+          _likeCounts[routeId] = count;
+        });
+      }
+    } catch (e) {
+      // Silently fail - like status is not critical
+    }
+  }
+
+  /// Toggle like status for a route
+  Future<void> _toggleLike(RunRoute route) async {
+    if (_authService.accessToken == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please log in to like routes')),
+      );
+      return;
+    }
+
+    final isCurrentlyLiked = _likedRoutes[route.id] ?? false;
+    final currentCount = _likeCounts[route.id] ?? 0;
+
+    // Optimistic update
+    setState(() {
+      _likedRoutes[route.id] = !isCurrentlyLiked;
+      _likeCounts[route.id] = isCurrentlyLiked ? currentCount - 1 : currentCount + 1;
+    });
+
+    try {
+      if (isCurrentlyLiked) {
+        await _routeRepository.unlikeRoute(
+          routeId: route.id,
+          accessToken: _authService.accessToken!,
+        );
+      } else {
+        await _routeRepository.likeRoute(
+          routeId: route.id,
+          accessToken: _authService.accessToken!,
+        );
+      }
+    } catch (e) {
+      // Revert on failure
+      if (mounted) {
+        setState(() {
+          _likedRoutes[route.id] = isCurrentlyLiked;
+          _likeCounts[route.id] = currentCount;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to update like')),
+        );
+      }
     }
   }
 
@@ -221,11 +313,11 @@ class _MatchesTabState extends State<MatchesTab> {
           ClipRRect(
             borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
             child: SizedBox(
-              height: 180,
+              height: 200,
               child: FlutterMap(
                 options: MapOptions(
-                  initialCenter: LatLng(route.startPointLat, route.startPointLon),
-                  initialZoom: 13.0,
+                  initialCenter: _calculateRouteCenter(route),
+                  initialZoom: _calculateZoomLevel(route),
                   interactionOptions: const InteractionOptions(
                     flags: InteractiveFlag.none, // Disable interactions
                   ),
@@ -238,9 +330,13 @@ class _MatchesTabState extends State<MatchesTab> {
                   PolylineLayer(
                     polylines: [
                       Polyline(
-                        points: route.points
-                            .map((p) => LatLng(p.latitude, p.longitude))
-                            .toList(),
+                        // Use route points if available, otherwise draw line from start to end
+                        points: route.points.isNotEmpty
+                            ? route.points.map((p) => LatLng(p.latitude, p.longitude)).toList()
+                            : [
+                                LatLng(route.startPointLat, route.startPointLon),
+                                LatLng(route.endPointLat, route.endPointLon),
+                              ],
                         strokeWidth: 4.0,
                         color: const Color(0xFF7ED321),
                       ),
@@ -251,27 +347,27 @@ class _MatchesTabState extends State<MatchesTab> {
                       // Start marker
                       Marker(
                         point: LatLng(route.startPointLat, route.startPointLon),
-                        width: 25,
-                        height: 25,
+                        width: 30,
+                        height: 30,
                         child: Container(
                           decoration: const BoxDecoration(
                             color: Colors.green,
                             shape: BoxShape.circle,
                           ),
-                          child: const Icon(Icons.play_arrow, color: Colors.white, size: 14),
+                          child: const Icon(Icons.play_arrow, color: Colors.white, size: 16),
                         ),
                       ),
                       // End marker
                       Marker(
                         point: LatLng(route.endPointLat, route.endPointLon),
-                        width: 25,
-                        height: 25,
+                        width: 30,
+                        height: 30,
                         child: Container(
                           decoration: const BoxDecoration(
                             color: Colors.red,
                             shape: BoxShape.circle,
                           ),
-                          child: const Icon(Icons.stop, color: Colors.white, size: 14),
+                          child: const Icon(Icons.stop, color: Colors.white, size: 16),
                         ),
                       ),
                     ],
@@ -335,7 +431,7 @@ class _MatchesTabState extends State<MatchesTab> {
                 ),
                 const SizedBox(height: 12),
 
-                // Time ago
+                // Time ago and like button
                 Row(
                   children: [
                     Icon(Icons.access_time, size: 14, color: Colors.grey[600]),
@@ -345,6 +441,33 @@ class _MatchesTabState extends State<MatchesTab> {
                       style: TextStyle(
                         fontSize: 13,
                         color: Colors.grey[600],
+                      ),
+                    ),
+                    const Spacer(),
+                    // Like button
+                    GestureDetector(
+                      onTap: () => _toggleLike(route),
+                      child: Row(
+                        children: [
+                          Icon(
+                            (_likedRoutes[route.id] ?? false)
+                                ? Icons.favorite
+                                : Icons.favorite_border,
+                            size: 22,
+                            color: (_likedRoutes[route.id] ?? false)
+                                ? Colors.red
+                                : Colors.grey[600],
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            '${_likeCounts[route.id] ?? 0}',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.grey[700],
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
@@ -474,5 +597,75 @@ class _MatchesTabState extends State<MatchesTab> {
     } else {
       return 'Just now';
     }
+  }
+
+  /// Calculate the center point of a route to show both start and end
+  LatLng _calculateRouteCenter(RunRoute route) {
+    if (route.points.isEmpty) {
+      // Fallback to midpoint between start and end
+      return LatLng(
+        (route.startPointLat + route.endPointLat) / 2,
+        (route.startPointLon + route.endPointLon) / 2,
+      );
+    }
+
+    // Calculate center from all points
+    double minLat = route.points.first.latitude;
+    double maxLat = route.points.first.latitude;
+    double minLon = route.points.first.longitude;
+    double maxLon = route.points.first.longitude;
+
+    for (var point in route.points) {
+      if (point.latitude < minLat) minLat = point.latitude;
+      if (point.latitude > maxLat) maxLat = point.latitude;
+      if (point.longitude < minLon) minLon = point.longitude;
+      if (point.longitude > maxLon) maxLon = point.longitude;
+    }
+
+    return LatLng((minLat + maxLat) / 2, (minLon + maxLon) / 2);
+  }
+
+  /// Calculate appropriate zoom level to fit the entire route
+  double _calculateZoomLevel(RunRoute route) {
+    if (route.points.isEmpty) {
+      // Calculate from start/end points
+      final latDiff = (route.startPointLat - route.endPointLat).abs();
+      final lonDiff = (route.startPointLon - route.endPointLon).abs();
+      final maxDiff = latDiff > lonDiff ? latDiff : lonDiff;
+
+      if (maxDiff < 0.005) return 16.0;
+      if (maxDiff < 0.01) return 15.0;
+      if (maxDiff < 0.02) return 14.0;
+      if (maxDiff < 0.05) return 13.0;
+      if (maxDiff < 0.1) return 12.0;
+      if (maxDiff < 0.2) return 11.0;
+      return 10.0;
+    }
+
+    // Calculate from all points
+    double minLat = route.points.first.latitude;
+    double maxLat = route.points.first.latitude;
+    double minLon = route.points.first.longitude;
+    double maxLon = route.points.first.longitude;
+
+    for (var point in route.points) {
+      if (point.latitude < minLat) minLat = point.latitude;
+      if (point.latitude > maxLat) maxLat = point.latitude;
+      if (point.longitude < minLon) minLon = point.longitude;
+      if (point.longitude > maxLon) maxLon = point.longitude;
+    }
+
+    final latDiff = maxLat - minLat;
+    final lonDiff = maxLon - minLon;
+    final maxDiff = latDiff > lonDiff ? latDiff : lonDiff;
+
+    // Add padding by using slightly lower zoom
+    if (maxDiff < 0.005) return 15.0;
+    if (maxDiff < 0.01) return 14.0;
+    if (maxDiff < 0.02) return 13.0;
+    if (maxDiff < 0.05) return 12.0;
+    if (maxDiff < 0.1) return 11.0;
+    if (maxDiff < 0.2) return 10.0;
+    return 9.0;
   }
 }

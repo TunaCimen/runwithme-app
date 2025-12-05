@@ -8,6 +8,7 @@ import '../../../core/models/route.dart' as route_model;
 import '../../../core/models/route_point.dart';
 import '../../auth/data/auth_service.dart';
 import '../data/route_repository.dart';
+import '../data/route_naming_service.dart';
 
 // Type alias to avoid conflict with Flutter's Route
 typedef RunRoute = route_model.Route;
@@ -62,6 +63,7 @@ class _MapPageState extends State<MapPage> {
   LatLng? _pointA;
   LatLng? _pointB;
   List<LatLng> _waypoints = [];
+  List<String> _waypointNames = []; // Names for waypoints
   RunRoute? _generatedRoute;
   bool _isGeneratingRoute = false;
   String? _pickingPointType; // 'start', 'end', or 'waypoint'
@@ -225,21 +227,43 @@ class _MapPageState extends State<MapPage> {
     );
 
     if (result.success && result.routes != null) {
-      setState(() {
-        _nearbyRoutes = result.routes!;
-        _isLoading = false;
-      });
+      // Fetch full route details to get all points for proper visualization
+      final fullRoutes = await _routeRepository.fetchFullRouteDetails(
+        routes: result.routes!,
+        accessToken: _authService.accessToken,
+      );
 
-      // Load like status for each route
-      for (var route in _nearbyRoutes) {
-        _loadRouteLikeStatus(route.id);
+      if (mounted) {
+        setState(() {
+          _nearbyRoutes = fullRoutes;
+          _isLoading = false;
+        });
+
+        // Load like status for each route
+        for (var route in _nearbyRoutes) {
+          _loadRouteLikeStatus(route.id);
+        }
       }
     } else {
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
       // Don't show error message for no routes found
     }
+  }
+
+  /// Get color for route based on index (for visual distinction)
+  Color _getRouteColor(int index) {
+    const colors = [
+      Color(0xFF2196F3), // Blue
+      Color(0xFF9C27B0), // Purple
+      Color(0xFFFF9800), // Orange
+      Color(0xFF00BCD4), // Cyan
+      Color(0xFFE91E63), // Pink
+    ];
+    return colors[index % colors.length];
   }
 
   /// Load nearby routes based on current center
@@ -280,6 +304,7 @@ class _MapPageState extends State<MapPage> {
         _pointA = null;
         _pointB = null;
         _waypoints = [];
+        _waypointNames = [];
         _generatedRoute = null;
         _pickingPointType = null;
         _pointAName = null;
@@ -294,28 +319,54 @@ class _MapPageState extends State<MapPage> {
 
     // Handle pick on map mode
     if (_pickingPointType != null) {
-      setState(() {
-        if (_pickingPointType == 'start') {
-          _pointA = point;
-          _pointAName = '${point.latitude.toStringAsFixed(4)}, ${point.longitude.toStringAsFixed(4)}';
-        } else if (_pickingPointType == 'end') {
-          _pointB = point;
-          _pointBName = '${point.latitude.toStringAsFixed(4)}, ${point.longitude.toStringAsFixed(4)}';
-        } else if (_pickingPointType == 'waypoint') {
-          _waypoints.add(point);
-        }
-        _pickingPointType = null;
-      });
-
-      // Generate route if both points are set
-      if (_pointA != null && _pointB != null) {
-        _generateRoute();
-      }
+      _setPointWithReverseGeocode(point, _pickingPointType!);
       return;
     }
 
     // Default behavior for old tap-to-select
     _handlePointSelection(point);
+  }
+
+  /// Set a point and fetch its location name via reverse geocoding
+  Future<void> _setPointWithReverseGeocode(LatLng point, String pointType) async {
+    // Set point immediately with loading placeholder
+    setState(() {
+      if (pointType == 'start') {
+        _pointA = point;
+        _pointAName = 'Loading...';
+      } else if (pointType == 'end') {
+        _pointB = point;
+        _pointBName = 'Loading...';
+      } else if (pointType == 'waypoint') {
+        // When adding a waypoint, the current endpoint becomes a waypoint
+        // and the new point becomes the new endpoint
+        if (_pointB != null && _pointBName != null) {
+          _waypoints.add(_pointB!);
+          _waypointNames.add(_pointBName!);
+        }
+        _pointB = point;
+        _pointBName = 'Loading...';
+      }
+      _pickingPointType = null;
+    });
+
+    // Fetch location name asynchronously
+    final locationName = await RouteNamingService.getLocationDisplayName(point);
+    if (mounted) {
+      setState(() {
+        if (pointType == 'start') {
+          _pointAName = locationName;
+        } else {
+          // Both 'end' and 'waypoint' update pointB
+          _pointBName = locationName;
+        }
+      });
+    }
+
+    // Generate route if both points are set
+    if (_pointA != null && _pointB != null) {
+      _generateRoute();
+    }
   }
 
   /// Generate route using OSRM API
@@ -374,7 +425,10 @@ class _MapPageState extends State<MapPage> {
           // Generate route title from point names
           final startName = _pointAName ?? 'Start';
           final endName = _pointBName ?? 'End';
-          final routeTitle = '$startName - $endName';
+          // If both names are the same, use "Route in X" format
+          final routeTitle = (startName == endName || startName == 'Unknown Location' || endName == 'Unknown Location')
+              ? 'Route in ${startName != 'Unknown Location' ? startName : endName}'
+              : '$startName - $endName';
 
           // Create a temporary route object
           setState(() {
@@ -391,7 +445,7 @@ class _MapPageState extends State<MapPage> {
               endPointLon: _pointB!.longitude,
               difficulty: _calculateDifficulty(distance.toDouble()),
               isPublic: true,
-              creatorId: 0, // Will be set when saving
+              creatorId: null, // Will be set when saving
               createdAt: DateTime.now(),
               updatedAt: DateTime.now(),
             );
@@ -474,6 +528,7 @@ class _MapPageState extends State<MapPage> {
         _pointA = null;
         _pointB = null;
         _waypoints = [];
+        _waypointNames = [];
         _generatedRoute = null;
         _pickingPointType = null;
         _pointAName = null;
@@ -704,6 +759,7 @@ class _MapPageState extends State<MapPage> {
                   hint: 'Choose starting location',
                   icon: Icons.my_location,
                   value: _pointA,
+                  displayName: _pointAName,
                   onTap: () => _showPointSelectionOptions(isStartPoint: true),
                   onClear: () {
                     setState(() {
@@ -721,6 +777,7 @@ class _MapPageState extends State<MapPage> {
                   hint: 'Choose destination',
                   icon: Icons.location_on,
                   value: _pointB,
+                  displayName: _pointBName,
                   onTap: () => _showPointSelectionOptions(isStartPoint: false),
                   onClear: () {
                     setState(() {
@@ -741,10 +798,14 @@ class _MapPageState extends State<MapPage> {
                         hint: 'Stop ${entry.key + 1}',
                         icon: Icons.add_location,
                         value: entry.value,
+                        displayName: entry.key < _waypointNames.length ? _waypointNames[entry.key] : null,
                         onTap: () => _showPointSelectionOptions(isStartPoint: false, isWaypoint: true),
                         onClear: () {
                           setState(() {
                             _waypoints.removeAt(entry.key);
+                            if (entry.key < _waypointNames.length) {
+                              _waypointNames.removeAt(entry.key);
+                            }
                             _generateRoute();
                           });
                         },
@@ -933,6 +994,7 @@ class _MapPageState extends State<MapPage> {
     required String hint,
     required IconData icon,
     required LatLng? value,
+    String? displayName,
     required VoidCallback onTap,
     required VoidCallback onClear,
   }) {
@@ -951,7 +1013,7 @@ class _MapPageState extends State<MapPage> {
       ),
       title: Text(
         value != null
-            ? '${value.latitude.toStringAsFixed(4)}, ${value.longitude.toStringAsFixed(4)}'
+            ? (displayName ?? '${value.latitude.toStringAsFixed(4)}, ${value.longitude.toStringAsFixed(4)}')
             : hint,
         style: TextStyle(
           color: value != null ? Colors.black87 : Colors.grey[600],
@@ -1065,7 +1127,14 @@ class _MapPageState extends State<MapPage> {
                                           _pointA = point;
                                           _pointAName = locationName;
                                         } else if (isWaypoint) {
-                                          _waypoints.add(point);
+                                          // When adding a waypoint, the current endpoint becomes a waypoint
+                                          // and the new point becomes the new endpoint
+                                          if (_pointB != null && _pointBName != null) {
+                                            _waypoints.add(_pointB!);
+                                            _waypointNames.add(_pointBName!);
+                                          }
+                                          _pointB = point;
+                                          _pointBName = locationName;
                                         } else {
                                           _pointB = point;
                                           _pointBName = locationName;
@@ -1152,17 +1221,23 @@ class _MapPageState extends State<MapPage> {
 
       setState(() {
         _pointA = currentLocation;
-        _pointAName = 'Current Location';
+        _pointAName = 'Loading...';
       });
 
       // Move map to this location
       _mapController.move(currentLocation, 14.0);
 
+      // Fetch location name via reverse geocoding
+      final locationName = await RouteNamingService.getLocationDisplayName(currentLocation);
       if (mounted) {
+        setState(() {
+          _pointAName = locationName;
+        });
+
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Using current map location as start point'),
-            duration: Duration(seconds: 2),
+          SnackBar(
+            content: Text('Start point set to $locationName'),
+            duration: const Duration(seconds: 2),
           ),
         );
       }
@@ -1229,13 +1304,22 @@ class _MapPageState extends State<MapPage> {
               // Route polylines (existing routes from database)
               if (_nearbyRoutes.isNotEmpty && !_isCreatingRoute)
                 PolylineLayer(
-                  polylines: _nearbyRoutes.map((route) {
+                  polylines: _nearbyRoutes.asMap().entries.map((entry) {
+                    final index = entry.key;
+                    final route = entry.value;
+                    // Use route points if available, otherwise draw line from start to end
+                    final points = route.points.isNotEmpty
+                        ? route.points.map((p) => LatLng(p.latitude, p.longitude)).toList()
+                        : [
+                            LatLng(route.startPointLat, route.startPointLon),
+                            LatLng(route.endPointLat, route.endPointLon),
+                          ];
                     return Polyline(
-                      points: route.points.map((p) => LatLng(p.latitude, p.longitude)).toList(),
-                      strokeWidth: route.id == _selectedRoute?.id ? 5.0 : 3.0,
+                      points: points,
+                      strokeWidth: route.id == _selectedRoute?.id ? 6.0 : 4.0,
                       color: route.id == _selectedRoute?.id
                           ? const Color(0xFF7ED321)
-                          : Colors.blue.withValues(alpha: 0.7),
+                          : _getRouteColor(index),
                     );
                   }).toList(),
                 ),

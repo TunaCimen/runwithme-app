@@ -70,7 +70,7 @@ class AuthResponseDto {
 }
 
 class UserInfoDto {
-  final int userId;
+  final String userId;
   final String username;
   final String email;
 
@@ -82,7 +82,7 @@ class UserInfoDto {
 
   factory UserInfoDto.fromJson(Map<String, dynamic> json) {
     return UserInfoDto(
-      userId: (json['userId'] as num?)?.toInt() ?? 0,
+      userId: json['userId'] as String? ?? '',
       username: json['username'] as String? ?? '',
       email: json['email'] as String? ?? '',
     );

@@ -113,70 +113,73 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
                 child: SafeArea(
                   child: _isLoading
                       ? const Center(child: CircularProgressIndicator(color: Colors.white))
-                      : Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const SizedBox(height: 10),
-                            CircleAvatar(
-                              radius: 45,
-                              backgroundColor: Colors.white,
-                              child: Text(
-                                _userProfile?.firstName?.isNotEmpty == true
-                                    ? _userProfile!.firstName![0].toUpperCase()
-                                    : currentUser.username[0].toUpperCase(),
-                                style: const TextStyle(
-                                  fontSize: 36,
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xFF7ED321),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              _userProfile?.fullName.isNotEmpty == true
-                                  ? _userProfile!.fullName
-                                  : currentUser.username,
-                              style: const TextStyle(
-                                fontSize: 22,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                              ),
-                            ),
-                            Text(
-                              '@${currentUser.username}',
-                              style: const TextStyle(
-                                fontSize: 14,
-                                color: Colors.white70,
-                              ),
-                            ),
-                            if (_userProfile?.expertLevel != null) ...[
-                              const SizedBox(height: 6),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-                                decoration: BoxDecoration(
-                                  color: Colors.white24,
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
+                      : SingleChildScrollView(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const SizedBox(height: 10),
+                              CircleAvatar(
+                                radius: 45,
+                                backgroundColor: Colors.white,
                                 child: Text(
-                                  _userProfile!.expertLevel!,
+                                  _userProfile?.firstName?.isNotEmpty == true
+                                      ? _userProfile!.firstName![0].toUpperCase()
+                                      : currentUser.username[0].toUpperCase(),
                                   style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 12,
+                                    fontSize: 36,
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFF7ED321),
                                   ),
                                 ),
                               ),
-                            ],
-                            const SizedBox(height: 12),
-                            // Stats row (empty state shows 0s)
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                              children: [
-                                _buildStatColumn('Runs', '0'),
-                                _buildStatColumn('Distance', '0 km'),
-                                _buildStatColumn('Streak', '0 days'),
+                              const SizedBox(height: 8),
+                              Text(
+                                _userProfile?.fullName.isNotEmpty == true
+                                    ? _userProfile!.fullName
+                                    : currentUser.username,
+                                style: const TextStyle(
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                ),
+                              ),
+                              Text(
+                                '@${currentUser.username}',
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.white70,
+                                ),
+                              ),
+                              if (_userProfile?.expertLevel != null) ...[
+                                const SizedBox(height: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white24,
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Text(
+                                    _userProfile!.expertLevel!,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ),
                               ],
-                            ),
-                          ],
+                              const SizedBox(height: 12),
+                              // Stats row (empty state shows 0s)
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                                children: [
+                                  _buildStatColumn('Runs', '0'),
+                                  _buildStatColumn('Distance', '0 km'),
+                                  _buildStatColumn('Streak', '0 days'),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                            ],
+                          ),
                         ),
                 ),
               ),

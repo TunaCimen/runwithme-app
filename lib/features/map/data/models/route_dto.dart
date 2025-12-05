@@ -14,7 +14,7 @@ class RouteDto {
   final double? endPointLat;
   final double? endPointLon;
   final List<RoutePointDto>? points;
-  final int? creatorId;
+  final String? creatorId;
   final String? createdAt;
   final String? updatedAt;
 
@@ -58,13 +58,14 @@ class RouteDto {
       endPointLat: (json['endPointLat'] as num?)?.toDouble(),
       endPointLon: (json['endPointLon'] as num?)?.toDouble(),
       points: pointsList.isNotEmpty ? pointsList : null,
-      creatorId: (json['creatorId'] as num?)?.toInt(),
+      creatorId: json['creatorId'] as String?,
       createdAt: json['createdAt'] as String?,
       updatedAt: json['updatedAt'] as String?,
     );
   }
 
   /// Convert to JSON for API requests
+  /// Note: createdAt and updatedAt are managed by the backend, so we never send them
   Map<String, dynamic> toJson() {
     return {
       if (id != null) 'id': id,
@@ -79,9 +80,8 @@ class RouteDto {
       if (endPointLat != null) 'endPointLat': endPointLat,
       if (endPointLon != null) 'endPointLon': endPointLon,
       if (points != null) 'points': points!.map((p) => p.toJson()).toList(),
-      if (creatorId != null) 'creatorId': creatorId,
-      if (createdAt != null) 'createdAt': createdAt,
-      if (updatedAt != null) 'updatedAt': updatedAt,
+      // Note: creatorId is set by the backend based on the authenticated user
+      // createdAt and updatedAt are managed by the backend
     };
   }
 
@@ -107,9 +107,10 @@ class RouteDto {
   }
 
   /// Create DTO from core Route model
+  /// For new routes (id == 0), id and creatorId are set to null so they won't be sent to the API
   factory RouteDto.fromModel(Route route) {
     return RouteDto(
-      id: route.id,
+      id: route.id == 0 ? null : route.id,
       title: route.title,
       description: route.description,
       distanceM: route.distanceM,
@@ -121,7 +122,7 @@ class RouteDto {
       endPointLat: route.endPointLat,
       endPointLon: route.endPointLon,
       points: route.points.map((p) => RoutePointDto.fromModel(p)).toList(),
-      creatorId: route.creatorId,
+      creatorId: (route.creatorId == null || route.creatorId!.isEmpty) ? null : route.creatorId,
       createdAt: route.createdAt.toIso8601String(),
       updatedAt: route.updatedAt.toIso8601String(),
     );
@@ -173,6 +174,7 @@ class RoutePointDto {
   }
 
   /// Create DTO from core RoutePoint model
+  /// Note: pointId and routeId are not sent as they are assigned by the backend
   factory RoutePointDto.fromModel(RoutePoint point) {
     return RoutePointDto(
       seqNo: point.seqNo,

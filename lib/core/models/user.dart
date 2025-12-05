@@ -1,6 +1,6 @@
 /// Core user model matching the database schema
 class User {
-  final int userId;
+  final String userId;
   final String username;
   final String email;
   final String passwordHash;
@@ -16,7 +16,7 @@ class User {
 
   factory User.fromJson(Map<String, dynamic> json) {
     return User(
-      userId: (json['userId'] as num?)?.toInt() ?? (json['user_id'] as num).toInt(),
+      userId: json['userId'] as String? ?? json['user_id'] as String? ?? '',
       username: json['username'] as String,
       email: json['email'] as String,
       passwordHash: json['passwordHash'] as String? ?? json['password_hash'] as String? ?? '',
@@ -44,7 +44,7 @@ class User {
   }
 
   User copyWith({
-    int? userId,
+    String? userId,
     String? username,
     String? email,
     String? passwordHash,

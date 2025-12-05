@@ -2,7 +2,7 @@
 /// Maps to the `route_likes` database table
 class RouteLike {
   final int routeId;
-  final int userId;
+  final String userId;
   final DateTime createdAt;
 
   RouteLike({
@@ -15,7 +15,7 @@ class RouteLike {
   factory RouteLike.fromJson(Map<String, dynamic> json) {
     return RouteLike(
       routeId: (json['routeId'] as num?)?.toInt() ?? (json['route_id'] as num).toInt(),
-      userId: (json['userId'] as num?)?.toInt() ?? (json['user_id'] as num).toInt(),
+      userId: json['userId'] as String? ?? json['user_id'] as String? ?? '',
       createdAt: DateTime.parse(json['createdAt'] as String? ??
                                 json['created_at'] as String),
     );
@@ -33,7 +33,7 @@ class RouteLike {
   /// Create a copy with updated fields
   RouteLike copyWith({
     int? routeId,
-    int? userId,
+    String? userId,
     DateTime? createdAt,
   }) {
     return RouteLike(

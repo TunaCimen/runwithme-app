@@ -1,6 +1,6 @@
 /// View model for profile statistics page
 class ProfileStatsViewModel {
-  final int userId;
+  final String userId;
   final int totalRuns;
   final double totalDistanceKm;
   final int currentStreak;
@@ -54,7 +54,7 @@ class ProfileStatsViewModel {
   }
 
   ProfileStatsViewModel copyWith({
-    int? userId,
+    String? userId,
     int? totalRuns,
     double? totalDistanceKm,
     int? currentStreak,
@@ -79,7 +79,7 @@ class ProfileStatsViewModel {
 
   factory ProfileStatsViewModel.fromJson(Map<String, dynamic> json) {
     return ProfileStatsViewModel(
-      userId: (json['userId'] as num).toInt(),
+      userId: json['userId'] as String? ?? '',
       totalRuns: (json['totalRuns'] as num?)?.toInt() ?? 0,
       totalDistanceKm: (json['totalDistanceKm'] as num?)?.toDouble() ?? 0.0,
       currentStreak: (json['currentStreak'] as num?)?.toInt() ?? 0,

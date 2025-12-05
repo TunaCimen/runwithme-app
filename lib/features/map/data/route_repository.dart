@@ -151,13 +151,21 @@ class RouteRepository {
     }
   }
 
-  /// Update an existing route
+  /// Update an existing route (full replacement - may not be supported by all backends)
   Future<SingleRouteResult> updateRoute({
     required Route route,
     required String accessToken,
   }) async {
     try {
       final dto = RouteDto.fromModel(route);
+      final jsonData = dto.toJson();
+      print('=== UPDATE ROUTE REQUEST ===');
+      print('Route ID: ${route.id}');
+      print('Endpoint: PUT /routes/${route.id}');
+      print('JSON Body: $jsonData');
+      print('Points count: ${route.points.length}');
+      print('============================');
+
       final responseDto = await _apiClient.updateRoute(
         routeId: route.id,
         route: dto,
@@ -166,8 +174,55 @@ class RouteRepository {
 
       return SingleRouteResult.success(route: responseDto.toModel());
     } on DioException catch (e) {
+      print('=== UPDATE ROUTE ERROR ===');
+      print('Status: ${e.response?.statusCode}');
+      print('Response: ${e.response?.data}');
+      print('==========================');
       return SingleRouteResult.failure(message: _handleDioError(e));
     } catch (e) {
+      print('Exception updating route: $e');
+      return SingleRouteResult.failure(
+        message: 'An unexpected error occurred: $e',
+      );
+    }
+  }
+
+  /// Update route with only editable fields
+  Future<SingleRouteResult> updateRouteFields({
+    required int routeId,
+    String? title,
+    String? description,
+    String? difficulty,
+    bool? isPublic,
+    required String accessToken,
+  }) async {
+    try {
+      print('=== UPDATE ROUTE FIELDS REQUEST ===');
+      print('Route ID: $routeId');
+      print('Title: $title');
+      print('Description: $description');
+      print('Difficulty: $difficulty');
+      print('IsPublic: $isPublic');
+      print('===================================');
+
+      final responseDto = await _apiClient.updateRouteFields(
+        routeId: routeId,
+        title: title,
+        description: description,
+        difficulty: difficulty,
+        isPublic: isPublic,
+        accessToken: accessToken,
+      );
+
+      return SingleRouteResult.success(route: responseDto.toModel());
+    } on DioException catch (e) {
+      print('=== UPDATE ROUTE FIELDS ERROR ===');
+      print('Status: ${e.response?.statusCode}');
+      print('Response: ${e.response?.data}');
+      print('=================================');
+      return SingleRouteResult.failure(message: _handleDioError(e));
+    } catch (e) {
+      print('Exception updating route fields: $e');
       return SingleRouteResult.failure(
         message: 'An unexpected error occurred: $e',
       );
@@ -239,18 +294,56 @@ class RouteRepository {
     String? accessToken,
   }) async {
     try {
-      return await _apiClient.getLikeCount(
+      // Try the count endpoint first
+      final count = await _apiClient.getLikeCount(
         routeId: routeId,
         accessToken: accessToken,
       );
+      print('Like count for route $routeId: $count');
+      return count;
     } catch (e) {
-      return 0;
+      print('Error getting like count for route $routeId: $e');
+      // Fallback: use paginated endpoint to get totalElements
+      try {
+        final response = await _apiClient.getRouteLikes(
+          routeId: routeId,
+          page: 0,
+          size: 1,
+          accessToken: accessToken,
+        );
+        print('Like count (from paginated) for route $routeId: ${response.totalElements}');
+        return response.totalElements;
+      } catch (e2) {
+        print('Fallback also failed for route $routeId: $e2');
+        return 0;
+      }
     }
+  }
+
+  /// Fetch full route details for a list of routes (to get points)
+  Future<List<Route>> fetchFullRouteDetails({
+    required List<Route> routes,
+    String? accessToken,
+  }) async {
+    final fullRoutes = <Route>[];
+    for (var route in routes) {
+      try {
+        final routeDto = await _apiClient.getRouteById(
+          route.id,
+          accessToken: accessToken,
+        );
+        fullRoutes.add(routeDto.toModel());
+      } catch (e) {
+        // If fetching full details fails, use the original route
+        fullRoutes.add(route);
+      }
+    }
+    return fullRoutes;
   }
 
   /// Get user's liked routes
   Future<List<Route>> getUserLikedRoutes({
-    required int userId,
+    required String userId,
     int page = 0,
     int size = 50,
     required String accessToken,
@@ -294,21 +387,31 @@ class RouteRepository {
       final statusCode = e.response!.statusCode;
       final data = e.response!.data;
 
+      // Try to extract error message from response
+      String? serverMessage;
+      if (data is Map) {
+        serverMessage = data['message'] as String? ??
+                        data['error'] as String? ??
+                        data['detail'] as String?;
+      } else if (data is String && data.isNotEmpty) {
+        serverMessage = data;
+      }
+
       switch (statusCode) {
         case 400:
-          return 'Invalid request: ${data?['message'] ?? 'Bad request'}';
+          return serverMessage ?? 'Invalid request: Bad request';
         case 401:
           return 'Unauthorized. Please log in again.';
         case 403:
-          return 'Access forbidden';
+          return serverMessage ?? 'Access forbidden';
         case 404:
           return 'Route not found';
         case 409:
-          return data?['message'] ?? 'Conflict occurred';
+          return serverMessage ?? 'Conflict occurred';
         case 500:
-          return 'Server error. Please try again later.';
+          return serverMessage ?? 'Server error. Please try again later.';
         default:
-          return 'Error: ${data?['message'] ?? 'Unknown error'}';
+          return serverMessage ?? 'Error: Unknown error ($statusCode)';
       }
     } else if (e.type == DioExceptionType.connectionTimeout ||
         e.type == DioExceptionType.receiveTimeout) {
