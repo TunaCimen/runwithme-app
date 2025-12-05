@@ -1,12 +1,9 @@
 // Authentication service using the new repository layer
 import '../../../core/models/user.dart';
-import '../../../core/models/user_profile.dart';
 import 'auth_repository.dart';
-import '../../profile/data/profile_repository.dart';
 
 class AuthService {
   final AuthRepository _repository;
-  final ProfileRepository _profileRepository;
 
   static String? _accessToken;
   static String? _refreshToken;
@@ -15,9 +12,7 @@ class AuthService {
   AuthService({
     String baseUrl = 'http://35.158.35.102:8080',
     AuthRepository? repository,
-    ProfileRepository? profileRepository,
-  }) : _repository = repository ?? AuthRepository(baseUrl: baseUrl),
-       _profileRepository = profileRepository ?? ProfileRepository();
+  }) : _repository = repository ?? AuthRepository(baseUrl: baseUrl);
 
   // Login using the repository
   Future<AuthResult> login({
@@ -39,6 +34,8 @@ class AuthService {
   }
 
   // Sign up using the repository
+  // Note: After registration, user needs to verify their email before logging in
+  // Profile creation is now handled after the user verifies email and logs in
   Future<AuthResult> signUp({
     required String email,
     required String password,
@@ -51,37 +48,19 @@ class AuthService {
       password: password,
     );
 
-    if (result.success && result.user != null) {
-      _accessToken = result.accessToken;
-      _refreshToken = result.refreshToken;
-      _currentUser = result.user;
-
-      // Automatically create user profile with initial data
-      if (fullName != null && fullName.isNotEmpty && _accessToken != null) {
-        try {
-          // Split full name into first and last name
-          final nameParts = fullName.trim().split(' ');
-          final firstName = nameParts.isNotEmpty ? nameParts.first : '';
-          final lastName = nameParts.length > 1 ? nameParts.sublist(1).join(' ') : '';
-
-          final profile = UserProfile(
-            userId: result.user!.userId,
-            firstName: firstName.isNotEmpty ? firstName : null,
-            lastName: lastName.isNotEmpty ? lastName : null,
-          );
-
-          await _profileRepository.createProfile(
-            profile,
-            accessToken: _accessToken!,
-          );
-        } catch (e) {
-          // If profile creation fails, log but don't fail the registration
-          print('⚠️ [AUTH_SERVICE] Failed to create profile: $e');
-        }
-      }
-    }
-
+    // Registration now returns emailVerificationRequired,
+    // no tokens are provided until email is verified
     return result;
+  }
+
+  // Resend verification email
+  Future<AuthResult> resendVerificationEmail({required String email}) async {
+    return await _repository.resendVerificationEmail(email: email);
+  }
+
+  // Get user email by username (for resend verification flow)
+  Future<String?> getEmailByUsername(String username) async {
+    return await _repository.getEmailByUsername(username);
   }
 
   // Mock Google sign in (to be implemented later)

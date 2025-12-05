@@ -21,12 +21,35 @@ class AuthApiClient {
             ));
 
   /// Register a new user
-  Future<AuthResponseDto> register(RegisterRequestDto request) async {
+  /// Returns RegisterResponseDto indicating email verification is required
+  Future<RegisterResponseDto> register(RegisterRequestDto request) async {
     final response = await _dio.post(
       '/api/v1/auth/register',
       data: request.toJson(),
     );
-    return AuthResponseDto.fromJson(_decodeResponse(response.data));
+    return RegisterResponseDto.fromJson(_decodeResponse(response.data));
+  }
+
+  /// Resend verification email
+  Future<EmailVerificationResponseDto> resendVerificationEmail(String email) async {
+    final requestData = {'email': email};
+    print('🔵 [AUTH_API] Resend verification request: $requestData');
+    final response = await _dio.post(
+      '/api/v1/auth/resend-verification',
+      data: requestData,
+    );
+    return EmailVerificationResponseDto.fromJson(_decodeResponse(response.data));
+  }
+
+  /// Get user email by username (for resend verification flow)
+  Future<String?> getEmailByUsername(String username) async {
+    try {
+      final response = await _dio.get('/api/v1/users/username/$username');
+      final data = _decodeResponse(response.data);
+      return data['email'] as String?;
+    } catch (e) {
+      return null;
+    }
   }
 
   /// Login with username and password

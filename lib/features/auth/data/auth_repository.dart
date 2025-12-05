@@ -13,6 +13,7 @@ class AuthRepository {
   }) : _apiClient = apiClient ?? AuthApiClient(baseUrl: baseUrl);
 
   /// Register a new user
+  /// Returns emailVerificationRequired: true to indicate user needs to verify email
   Future<AuthResult> register({
     required String username,
     required String email,
@@ -29,19 +30,13 @@ class AuthRepository {
 
       final response = await _apiClient.register(request);
 
-      print('✅ [AUTH_REPO] Registration successful for user: ${response.user.username}');
+      print('✅ [AUTH_REPO] Registration successful, verification email sent to: ${response.email}');
 
-      return AuthResult.success(
-        user: User(
-          userId: response.user.userId,
-          username: response.user.username,
-          email: response.user.email,
-          passwordHash: '',
-          createdAt: DateTime.now(),
-        ),
-        accessToken: response.accessToken,
-        refreshToken: response.refreshToken,
-        message: 'Account created successfully',
+      return AuthResult.emailVerificationRequired(
+        email: response.email,
+        message: response.message.isNotEmpty
+            ? response.message
+            : 'Registration successful! Please check your email to verify your account.',
       );
     } on DioException catch (e) {
       return _handleDioException(e, 'Registration failed');
@@ -49,6 +44,41 @@ class AuthRepository {
       print('🔴 [AUTH_REPO] Unexpected error: $e');
       return AuthResult.failure(message: 'An unexpected error occurred');
     }
+  }
+
+  /// Resend verification email
+  Future<AuthResult> resendVerificationEmail({required String email}) async {
+    try {
+      print('🔵 [AUTH_REPO] Resending verification email to: $email');
+
+      final response = await _apiClient.resendVerificationEmail(email);
+
+      if (response.success) {
+        print('✅ [AUTH_REPO] Verification email resent to: $email');
+        return AuthResult.emailVerificationRequired(
+          email: email,
+          message: response.message.isNotEmpty
+              ? response.message
+              : 'Verification email sent! Please check your inbox.',
+        );
+      } else {
+        return AuthResult.failure(
+          message: response.message.isNotEmpty
+              ? response.message
+              : 'Failed to resend verification email',
+        );
+      }
+    } on DioException catch (e) {
+      return _handleDioException(e, 'Failed to resend verification email');
+    } catch (e) {
+      print('🔴 [AUTH_REPO] Unexpected error: $e');
+      return AuthResult.failure(message: 'An unexpected error occurred');
+    }
+  }
+
+  /// Get user email by username
+  Future<String?> getEmailByUsername(String username) async {
+    return await _apiClient.getEmailByUsername(username);
   }
 
   /// Login with username and password
@@ -97,19 +127,48 @@ class AuthRepository {
 
     String errorMessage = defaultMessage;
 
+    final responseData = e.response?.data;
+
     if (e.response?.statusCode == 400) {
-      final responseData = e.response?.data;
       if (responseData is Map && responseData['message'] != null) {
         errorMessage = responseData['message'];
       } else {
         errorMessage = 'Invalid request data';
       }
     } else if (e.response?.statusCode == 401) {
+      if (responseData is Map && responseData['message'] != null) {
+        var msg = responseData['message'].toString().toLowerCase();
+        if (msg.contains('email') && (msg.contains('verify') || msg.contains('verified'))) {
+          return AuthResult.emailNotVerified(
+            message: responseData['message'],
+          );
+        }
+      }
       errorMessage = 'Invalid username or password';
+    } else if (e.response?.statusCode == 403) {
+      // 403 Forbidden - often used for email not verified
+      if (responseData is Map) {
+        if (responseData['emailVerified'] == false ||
+            (responseData['message'] != null &&
+                responseData['message'].toString().toLowerCase().contains('verif'))) {
+          return AuthResult.emailNotVerified(
+            message: responseData['message'] ?? 'Email not verified. Please check your inbox.',
+            email: responseData['email'] as String?, // Backend may include email
+          );
+        }
+        if (responseData['message'] != null) {
+          errorMessage = responseData['message'];
+        }
+      }
     } else if (e.response?.statusCode == 404) {
       errorMessage = 'Account not found';
     } else if (e.response?.statusCode == 409) {
-      errorMessage = 'An account with this email already exists';
+      // Use the actual message from the backend (could be username OR email conflict)
+      if (responseData is Map && responseData['message'] != null) {
+        errorMessage = responseData['message'];
+      } else {
+        errorMessage = 'An account with this username or email already exists';
+      }
     } else if (e.type == DioExceptionType.connectionTimeout ||
         e.type == DioExceptionType.receiveTimeout) {
       errorMessage = 'Connection timeout. Please try again.';
@@ -129,6 +188,9 @@ class AuthResult {
   final User? user;
   final String? accessToken;
   final String? refreshToken;
+  final bool emailVerificationRequired;
+  final bool emailNotVerified;
+  final String? email;
 
   const AuthResult._({
     required this.success,
@@ -136,6 +198,9 @@ class AuthResult {
     this.user,
     this.accessToken,
     this.refreshToken,
+    this.emailVerificationRequired = false,
+    this.emailNotVerified = false,
+    this.email,
   });
 
   factory AuthResult.success({
@@ -159,6 +224,32 @@ class AuthResult {
     return AuthResult._(
       success: false,
       message: message,
+    );
+  }
+
+  /// Registration successful, email verification required
+  factory AuthResult.emailVerificationRequired({
+    required String email,
+    required String message,
+  }) {
+    return AuthResult._(
+      success: true,
+      message: message,
+      emailVerificationRequired: true,
+      email: email,
+    );
+  }
+
+  /// Login failed because email is not verified
+  factory AuthResult.emailNotVerified({
+    required String message,
+    String? email,
+  }) {
+    return AuthResult._(
+      success: false,
+      message: message,
+      emailNotVerified: true,
+      email: email,
     );
   }
 }

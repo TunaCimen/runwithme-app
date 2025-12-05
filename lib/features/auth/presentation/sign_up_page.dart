@@ -46,18 +46,48 @@ class _SignUpPageState extends State<SignUpPage> {
     if (!mounted) return;
     setState(() => _isLoading = false);
 
-    if (result.success) {
-      // Show success message and navigate to main app
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Welcome, ${result.user?.username}!'),
-          backgroundColor: Colors.green,
-        ),
-      );
-      Navigator.of(context).pushReplacementNamed('/home');
+    if (result.success && result.emailVerificationRequired) {
+      // Show success dialog and redirect to login page
+      _showVerificationRequiredDialog(result.message);
+    } else if (result.success) {
+      // Fallback for direct success (shouldn't happen with new flow)
+      Navigator.of(context).pop();
     } else {
       _showErrorDialog(result.message);
     }
+  }
+
+  void _showVerificationRequiredDialog(String message) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        icon: const Icon(
+          Icons.mark_email_read_outlined,
+          size: 48,
+          color: Color(0xFF7ED321),
+        ),
+        title: const Text('Verify Your Email'),
+        content: Text(
+          message.isNotEmpty
+              ? message
+              : 'Registration successful! Please check your email and click the verification link to activate your account.',
+          textAlign: TextAlign.center,
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () {
+              Navigator.pop(context); // Close dialog
+              Navigator.pop(context); // Go back to login page
+            },
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFF7ED321),
+            ),
+            child: const Text('Go to Login'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showErrorDialog(String message) {

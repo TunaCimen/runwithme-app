@@ -13,15 +13,18 @@ class _LoginPageState extends State<LoginPage> {
   final _formKey = GlobalKey<FormState>();
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _emailForVerificationController = TextEditingController();
   final _authService = AuthService();
 
   bool _isLoading = false;
   bool _isLoginTab = true;
+  bool _isResending = false;
 
   @override
   void dispose() {
     _usernameController.dispose();
     _passwordController.dispose();
+    _emailForVerificationController.dispose();
     super.dispose();
   }
 
@@ -40,9 +43,144 @@ class _LoginPageState extends State<LoginPage> {
 
     if (result.success) {
       Navigator.of(context).pushReplacementNamed('/home');
+    } else if (result.emailNotVerified) {
+      // Try to get email from backend using username
+      var email = result.email;
+      if (email == null || email.isEmpty) {
+        email = await _authService.getEmailByUsername(_usernameController.text.trim());
+      }
+      if (!mounted) return;
+      // Show email not verified message with resend option
+      _showEmailNotVerifiedDialog(email);
     } else {
       _showErrorSnackBar(result.message);
     }
+  }
+
+  void _showEmailNotVerifiedDialog(String? emailFromBackend) {
+    // Pre-fill email if provided by backend
+    if (emailFromBackend != null && emailFromBackend.isNotEmpty) {
+      _emailForVerificationController.text = emailFromBackend;
+    }
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          var hasEmail = emailFromBackend != null && emailFromBackend.isNotEmpty;
+
+          return AlertDialog(
+            icon: const Icon(
+              Icons.mark_email_unread_outlined,
+              size: 48,
+              color: Colors.orange,
+            ),
+            title: const Text('Email Not Verified'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  hasEmail
+                      ? 'Please verify your email before logging in.\n\nA verification link was sent to:'
+                      : 'Please verify your email before logging in. Check your inbox for the verification link.',
+                  textAlign: TextAlign.center,
+                ),
+                if (hasEmail) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[100],
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      emailFromBackend,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 15,
+                      ),
+                    ),
+                  ),
+                ] else ...[
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: _emailForVerificationController,
+                    keyboardType: TextInputType.emailAddress,
+                    decoration: InputDecoration(
+                      labelText: 'Email address',
+                      hintText: 'Enter the email you registered with',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      filled: true,
+                      fillColor: Colors.grey[50],
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: _isResending
+                    ? null
+                    : () async {
+                        var email = hasEmail
+                            ? emailFromBackend
+                            : _emailForVerificationController.text.trim();
+
+                        if (email.isEmpty) {
+                          _showErrorSnackBar('Please enter your email address');
+                          return;
+                        }
+
+                        setDialogState(() => _isResending = true);
+
+                        final navigator = Navigator.of(dialogContext);
+                        final result = await _authService.resendVerificationEmail(email: email);
+
+                        if (!mounted) return;
+                        setDialogState(() => _isResending = false);
+
+                        navigator.pop();
+
+                        if (result.success) {
+                          _showSuccessSnackBar(result.message);
+                        } else {
+                          _showErrorSnackBar(result.message);
+                        }
+                      },
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFF7ED321),
+                ),
+                child: _isResending
+                    ? const SizedBox(
+                        height: 16,
+                        width: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Text('Resend Verification Email'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  void _showSuccessSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: const Color(0xFF7ED321),
+      ),
+    );
   }
 
   void _showErrorSnackBar(String message) {

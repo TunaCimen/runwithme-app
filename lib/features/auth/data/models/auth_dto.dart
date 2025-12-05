@@ -121,3 +121,57 @@ class ApiResponseDto<T> {
     );
   }
 }
+
+/// Registration response DTO (before email verification)
+class RegisterResponseDto {
+  final String message;
+  final bool emailVerificationRequired;
+  final String email;
+
+  const RegisterResponseDto({
+    required this.message,
+    required this.emailVerificationRequired,
+    required this.email,
+  });
+
+  factory RegisterResponseDto.fromJson(Map<String, dynamic> json) {
+    return RegisterResponseDto(
+      message: json['message'] as String? ?? '',
+      emailVerificationRequired: json['emailVerificationRequired'] as bool? ?? true,
+      email: json['email'] as String? ?? '',
+    );
+  }
+}
+
+/// Email verification response DTO
+class EmailVerificationResponseDto {
+  final String message;
+  final bool success;
+
+  const EmailVerificationResponseDto({
+    required this.message,
+    required this.success,
+  });
+
+  factory EmailVerificationResponseDto.fromJson(Map<String, dynamic> json) {
+    return EmailVerificationResponseDto(
+      message: json['message'] as String? ?? '',
+      success: json['success'] as bool? ?? false,
+    );
+  }
+}
+
+/// Resend verification request DTO
+class ResendVerificationRequestDto {
+  final String email;
+
+  const ResendVerificationRequestDto({
+    required this.email,
+  });
+
+  Map<String, dynamic> toJson() {
+    return {
+      'email': email,
+    };
+  }
+}
