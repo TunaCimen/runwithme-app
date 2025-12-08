@@ -82,7 +82,7 @@ class UserInfoDto {
 
   factory UserInfoDto.fromJson(Map<String, dynamic> json) {
     return UserInfoDto(
-      userId: json['userId'] as String? ?? '',
+      userId: json['userId'] as String? ?? json['user_id'] as String? ?? json['id']?.toString() ?? '',
       username: json['username'] as String? ?? '',
       email: json['email'] as String? ?? '',
     );

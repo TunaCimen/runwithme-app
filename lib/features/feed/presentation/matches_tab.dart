@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import '../../../core/models/route.dart' as route_model;
+import '../../../core/models/user_profile.dart';
 import '../../auth/data/auth_service.dart';
 import '../../map/data/route_repository.dart';
+import '../../profile/data/profile_repository.dart';
+import '../../profile/presentation/user_profile_page.dart';
 
 typedef RunRoute = route_model.Route;
 
@@ -17,6 +20,7 @@ class MatchesTab extends StatefulWidget {
 class _MatchesTabState extends State<MatchesTab> {
   final RouteRepository _routeRepository = RouteRepository();
   final AuthService _authService = AuthService();
+  final ProfileRepository _profileRepository = ProfileRepository();
 
   List<RunRoute> _publicRoutes = [];
   bool _isLoading = true;
@@ -25,6 +29,9 @@ class _MatchesTabState extends State<MatchesTab> {
   // Like state
   final Map<int, bool> _likedRoutes = {};
   final Map<int, int> _likeCounts = {};
+
+  // Creator profiles cache
+  final Map<String, UserProfile> _creatorProfiles = {};
 
   @override
   void initState() {
@@ -59,9 +66,12 @@ class _MatchesTabState extends State<MatchesTab> {
           _publicRoutes.sort((a, b) => b.createdAt.compareTo(a.createdAt));
         });
 
-        // Load like status for each route
+        // Load like status and creator profiles for each route
         for (var route in _publicRoutes) {
           _loadLikeStatus(route.id);
+          if (route.creatorId != null) {
+            _loadCreatorProfile(route.creatorId!);
+          }
         }
       }
     } else {
@@ -100,6 +110,40 @@ class _MatchesTabState extends State<MatchesTab> {
     } catch (e) {
       // Silently fail - like status is not critical
     }
+  }
+
+  /// Load creator profile for a route
+  Future<void> _loadCreatorProfile(String creatorId) async {
+    // Skip if already loaded
+    if (_creatorProfiles.containsKey(creatorId)) return;
+
+    final accessToken = _authService.accessToken;
+    if (accessToken == null) return;
+
+    final result = await _profileRepository.getProfile(
+      creatorId,
+      accessToken: accessToken,
+    );
+
+    if (mounted && result.success && result.profile != null) {
+      setState(() {
+        _creatorProfiles[creatorId] = result.profile!;
+      });
+    }
+  }
+
+  /// Navigate to user profile
+  void _navigateToUserProfile(String userId) {
+    final profile = _creatorProfiles[userId];
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => UserProfilePage(
+          userId: userId,
+          username: profile?.fullName,
+        ),
+      ),
+    );
   }
 
   /// Toggle like status for a route
@@ -293,6 +337,12 @@ class _MatchesTabState extends State<MatchesTab> {
   }
 
   Widget _buildRouteCard(RunRoute route) {
+    final creatorProfile = route.creatorId != null
+        ? _creatorProfiles[route.creatorId]
+        : null;
+    final currentUserId = _authService.currentUser?.userId;
+    final isOwnRoute = route.creatorId == currentUserId;
+
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -309,9 +359,93 @@ class _MatchesTabState extends State<MatchesTab> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Creator header
+          if (route.creatorId != null)
+            InkWell(
+              onTap: () => _navigateToUserProfile(route.creatorId!),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 20,
+                      backgroundColor: const Color(0xFF7ED321),
+                      backgroundImage: creatorProfile?.profilePic != null
+                          ? NetworkImage(creatorProfile!.profilePic!)
+                          : null,
+                      child: creatorProfile?.profilePic == null
+                          ? Text(
+                              _getCreatorInitial(creatorProfile),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                            )
+                          : null,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  _getCreatorName(creatorProfile, isOwnRoute),
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 15,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              if (isOwnRoute) ...[
+                                const SizedBox(width: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF7ED321).withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: const Text(
+                                    'You',
+                                    style: TextStyle(
+                                      color: Color(0xFF7ED321),
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                          Text(
+                            _getTimeAgo(route.createdAt),
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Icon(
+                      Icons.chevron_right,
+                      color: Colors.grey[400],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
           // Map preview
           ClipRRect(
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+            borderRadius: route.creatorId != null
+                ? BorderRadius.zero
+                : const BorderRadius.vertical(top: Radius.circular(16)),
             child: SizedBox(
               height: 200,
               child: FlutterMap(
@@ -533,6 +667,26 @@ class _MatchesTabState extends State<MatchesTab> {
         ],
       ),
     );
+  }
+
+  String _getCreatorInitial(UserProfile? profile) {
+    if (profile != null && profile.fullName.isNotEmpty) {
+      return profile.fullName[0].toUpperCase();
+    }
+    return '?';
+  }
+
+  String _getCreatorName(UserProfile? profile, bool isOwnRoute) {
+    if (isOwnRoute) {
+      if (profile != null && profile.fullName.isNotEmpty) {
+        return profile.fullName;
+      }
+      return _authService.currentUser?.username ?? 'You';
+    }
+    if (profile != null && profile.fullName.isNotEmpty) {
+      return profile.fullName;
+    }
+    return 'Runner';
   }
 
   Widget _buildStatColumn({

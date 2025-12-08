@@ -158,13 +158,6 @@ class RouteRepository {
   }) async {
     try {
       final dto = RouteDto.fromModel(route);
-      final jsonData = dto.toJson();
-      print('=== UPDATE ROUTE REQUEST ===');
-      print('Route ID: ${route.id}');
-      print('Endpoint: PUT /routes/${route.id}');
-      print('JSON Body: $jsonData');
-      print('Points count: ${route.points.length}');
-      print('============================');
 
       final responseDto = await _apiClient.updateRoute(
         routeId: route.id,
@@ -174,13 +167,8 @@ class RouteRepository {
 
       return SingleRouteResult.success(route: responseDto.toModel());
     } on DioException catch (e) {
-      print('=== UPDATE ROUTE ERROR ===');
-      print('Status: ${e.response?.statusCode}');
-      print('Response: ${e.response?.data}');
-      print('==========================');
       return SingleRouteResult.failure(message: _handleDioError(e));
     } catch (e) {
-      print('Exception updating route: $e');
       return SingleRouteResult.failure(
         message: 'An unexpected error occurred: $e',
       );
@@ -197,14 +185,6 @@ class RouteRepository {
     required String accessToken,
   }) async {
     try {
-      print('=== UPDATE ROUTE FIELDS REQUEST ===');
-      print('Route ID: $routeId');
-      print('Title: $title');
-      print('Description: $description');
-      print('Difficulty: $difficulty');
-      print('IsPublic: $isPublic');
-      print('===================================');
-
       final responseDto = await _apiClient.updateRouteFields(
         routeId: routeId,
         title: title,
@@ -216,13 +196,8 @@ class RouteRepository {
 
       return SingleRouteResult.success(route: responseDto.toModel());
     } on DioException catch (e) {
-      print('=== UPDATE ROUTE FIELDS ERROR ===');
-      print('Status: ${e.response?.statusCode}');
-      print('Response: ${e.response?.data}');
-      print('=================================');
       return SingleRouteResult.failure(message: _handleDioError(e));
     } catch (e) {
-      print('Exception updating route fields: $e');
       return SingleRouteResult.failure(
         message: 'An unexpected error occurred: $e',
       );
@@ -299,10 +274,8 @@ class RouteRepository {
         routeId: routeId,
         accessToken: accessToken,
       );
-      print('Like count for route $routeId: $count');
       return count;
     } catch (e) {
-      print('Error getting like count for route $routeId: $e');
       // Fallback: use paginated endpoint to get totalElements
       try {
         final response = await _apiClient.getRouteLikes(
@@ -311,10 +284,8 @@ class RouteRepository {
           size: 1,
           accessToken: accessToken,
         );
-        print('Like count (from paginated) for route $routeId: ${response.totalElements}');
         return response.totalElements;
-      } catch (e2) {
-        print('Fallback also failed for route $routeId: $e2');
+      } catch (_) {
         return 0;
       }
     }

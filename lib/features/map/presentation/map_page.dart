@@ -518,8 +518,8 @@ class _MapPageState extends State<MapPage> {
           routeId: createdRoute.id,
           accessToken: _authService.accessToken!,
         );
-      } catch (e) {
-        print('Failed to auto-like created route: $e');
+      } catch (_) {
+        // Silently ignore auto-like failures
       }
 
       // Exit creation mode

@@ -23,8 +23,6 @@ class ProfileApiClient {
   /// Get user profile by user ID
   /// GET /api/v1/user-profiles/:id
   Future<UserProfile> getUserProfile(String userId, {String? accessToken}) async {
-    print('🔵 [PROFILE_API] GET /api/v1/user-profiles/$userId');
-
     final response = await _dio.get(
       '/api/v1/user-profiles/$userId',
       options: accessToken != null
@@ -32,7 +30,6 @@ class ProfileApiClient {
           : null,
     );
 
-    print('✅ [PROFILE_API] Profile fetched: ${response.data}');
     return UserProfile.fromJson(_decodeResponse(response.data));
   }
 
@@ -43,9 +40,6 @@ class ProfileApiClient {
     UserProfile profile, {
     required String accessToken,
   }) async {
-    print('🔵 [PROFILE_API] PUT /api/v1/user-profiles/$userId');
-    print('📤 [PROFILE_API] Request body: ${profile.toJson()}');
-
     final response = await _dio.put(
       '/api/v1/user-profiles/$userId',
       data: profile.toJson(),
@@ -54,7 +48,6 @@ class ProfileApiClient {
       ),
     );
 
-    print('✅ [PROFILE_API] Profile updated: ${response.data}');
     return UserProfile.fromJson(_decodeResponse(response.data));
   }
 
@@ -64,9 +57,6 @@ class ProfileApiClient {
     UserProfile profile, {
     required String accessToken,
   }) async {
-    print('🔵 [PROFILE_API] POST /api/v1/user-profiles');
-    print('📤 [PROFILE_API] Request body: ${profile.toJson()}');
-
     final response = await _dio.post(
       '/api/v1/user-profiles',
       data: profile.toJson(),
@@ -75,7 +65,6 @@ class ProfileApiClient {
       ),
     );
 
-    print('✅ [PROFILE_API] Profile created: ${response.data}');
     return UserProfile.fromJson(_decodeResponse(response.data));
   }
 

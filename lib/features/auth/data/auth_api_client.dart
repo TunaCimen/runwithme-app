@@ -32,11 +32,9 @@ class AuthApiClient {
 
   /// Resend verification email
   Future<EmailVerificationResponseDto> resendVerificationEmail(String email) async {
-    final requestData = {'email': email};
-    print('🔵 [AUTH_API] Resend verification request: $requestData');
     final response = await _dio.post(
       '/api/v1/auth/resend-verification',
-      data: requestData,
+      data: {'email': email},
     );
     return EmailVerificationResponseDto.fromJson(_decodeResponse(response.data));
   }

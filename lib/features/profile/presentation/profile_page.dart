@@ -3,6 +3,7 @@ import '../../../core/models/user_profile.dart';
 import '../../auth/data/auth_service.dart';
 import '../data/profile_repository.dart';
 import '../../map/data/route_repository.dart';
+import '../../friends/presentation/screens/friends_screen.dart';
 import 'edit_profile_page.dart';
 import 'saved_routes_tab.dart';
 
@@ -93,6 +94,13 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
             expandedHeight: 280,
             pinned: true,
             actions: [
+              IconButton(
+                icon: const Icon(Icons.people_outline),
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const FriendsScreen()),
+                ),
+              ),
               IconButton(
                 icon: const Icon(Icons.settings_outlined),
                 onPressed: _showSettingsSheet,
@@ -225,12 +233,13 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
   }
 
   Widget _buildNoProfileState() {
-    return Center(
+    return SingleChildScrollView(
       child: Padding(
         padding: const EdgeInsets.all(32.0),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
+            const SizedBox(height: 32),
             Icon(
               Icons.person_add_outlined,
               size: 80,
@@ -267,6 +276,7 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
                 ),
               ),
             ),
+            const SizedBox(height: 32),
           ],
         ),
       ),
@@ -410,6 +420,17 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
                 onTap: () {
                   Navigator.pop(context);
                   _navigateToEditProfile();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.people),
+                title: const Text('Friends'),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const FriendsScreen()),
+                  );
                 },
               ),
               ListTile(

@@ -41,13 +41,22 @@ class UserProfile {
       birthday: json['birthday'] != null ? DateTime.parse(json['birthday'] as String) : null,
       expertLevel: json['expertLevel'] as String? ?? json['expert_level'] as String?,
       profilePic: json['profilePic'] as String? ?? json['profile_pic'] as String?,
-      profileVisibility: json['profileVisibility'] as bool? ?? json['profile_visibility'] as bool? ?? true,
+      profileVisibility: _parseBool(json['profileVisibility'] ?? json['profile_visibility'], defaultValue: true),
       regionId: (json['regionId'] as num?)?.toInt() ?? (json['region_id'] as num?)?.toInt(),
       subregionId: (json['subregionId'] as num?)?.toInt() ?? (json['subregion_id'] as num?)?.toInt(),
       countryId: (json['countryId'] as num?)?.toInt() ?? (json['country_id'] as num?)?.toInt(),
       stateId: (json['stateId'] as num?)?.toInt() ?? (json['state_id'] as num?)?.toInt(),
       cityId: (json['cityId'] as num?)?.toInt() ?? (json['city_id'] as num?)?.toInt(),
     );
+  }
+
+  /// Parse bool from various formats (bool, String, int)
+  static bool _parseBool(dynamic value, {bool defaultValue = false}) {
+    if (value == null) return defaultValue;
+    if (value is bool) return value;
+    if (value is String) return value.toLowerCase() == 'true';
+    if (value is num) return value != 0;
+    return defaultValue;
   }
 
   Map<String, dynamic> toJson() {

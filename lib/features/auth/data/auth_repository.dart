@@ -20,8 +20,6 @@ class AuthRepository {
     required String password,
   }) async {
     try {
-      print('🔵 [AUTH_REPO] Attempting registration for: $email');
-
       final request = RegisterRequestDto(
         username: username,
         email: email,
@@ -29,8 +27,6 @@ class AuthRepository {
       );
 
       final response = await _apiClient.register(request);
-
-      print('✅ [AUTH_REPO] Registration successful, verification email sent to: ${response.email}');
 
       return AuthResult.emailVerificationRequired(
         email: response.email,
@@ -41,7 +37,6 @@ class AuthRepository {
     } on DioException catch (e) {
       return _handleDioException(e, 'Registration failed');
     } catch (e) {
-      print('🔴 [AUTH_REPO] Unexpected error: $e');
       return AuthResult.failure(message: 'An unexpected error occurred');
     }
   }
@@ -49,12 +44,9 @@ class AuthRepository {
   /// Resend verification email
   Future<AuthResult> resendVerificationEmail({required String email}) async {
     try {
-      print('🔵 [AUTH_REPO] Resending verification email to: $email');
-
       final response = await _apiClient.resendVerificationEmail(email);
 
       if (response.success) {
-        print('✅ [AUTH_REPO] Verification email resent to: $email');
         return AuthResult.emailVerificationRequired(
           email: email,
           message: response.message.isNotEmpty
@@ -71,7 +63,6 @@ class AuthRepository {
     } on DioException catch (e) {
       return _handleDioException(e, 'Failed to resend verification email');
     } catch (e) {
-      print('🔴 [AUTH_REPO] Unexpected error: $e');
       return AuthResult.failure(message: 'An unexpected error occurred');
     }
   }
@@ -87,16 +78,12 @@ class AuthRepository {
     required String password,
   }) async {
     try {
-      print('🔵 [AUTH_REPO] Attempting login for: $username');
-
       final request = LoginRequestDto(
         username: username,
         password: password,
       );
 
       final response = await _apiClient.login(request);
-
-      print('✅ [AUTH_REPO] Login successful for user: ${response.user.username}');
 
       return AuthResult.success(
         user: User(
@@ -113,20 +100,13 @@ class AuthRepository {
     } on DioException catch (e) {
       return _handleDioException(e, 'Login failed');
     } catch (e) {
-      print('🔴 [AUTH_REPO] Unexpected error: $e');
       return AuthResult.failure(message: 'An unexpected error occurred');
     }
   }
 
   /// Handle Dio exceptions and return appropriate error messages
   AuthResult _handleDioException(DioException e, String defaultMessage) {
-    print('🔴 [AUTH_REPO] DioException:');
-    print('  - Type: ${e.type}');
-    print('  - Status Code: ${e.response?.statusCode}');
-    print('  - Response Data: ${e.response?.data}');
-
     String errorMessage = defaultMessage;
-
     final responseData = e.response?.data;
 
     if (e.response?.statusCode == 400) {
@@ -153,7 +133,7 @@ class AuthRepository {
                 responseData['message'].toString().toLowerCase().contains('verif'))) {
           return AuthResult.emailNotVerified(
             message: responseData['message'] ?? 'Email not verified. Please check your inbox.',
-            email: responseData['email'] as String?, // Backend may include email
+            email: responseData['email'] as String?,
           );
         }
         if (responseData['message'] != null) {
@@ -163,7 +143,6 @@ class AuthRepository {
     } else if (e.response?.statusCode == 404) {
       errorMessage = 'Account not found';
     } else if (e.response?.statusCode == 409) {
-      // Use the actual message from the backend (could be username OR email conflict)
       if (responseData is Map && responseData['message'] != null) {
         errorMessage = responseData['message'];
       } else {
@@ -176,7 +155,6 @@ class AuthRepository {
       errorMessage = 'Could not connect to server';
     }
 
-    print('❌ [AUTH_REPO] Error: $errorMessage');
     return AuthResult.failure(message: errorMessage);
   }
 }

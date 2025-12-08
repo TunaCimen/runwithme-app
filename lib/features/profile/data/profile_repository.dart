@@ -14,16 +14,11 @@ class ProfileRepository {
   /// Get user profile by user ID
   Future<ProfileResult> getProfile(String userId, {required String accessToken}) async {
     try {
-      print('🔵 [PROFILE_REPO] Fetching profile for user: $userId');
-
       final profile = await _apiClient.getUserProfile(userId, accessToken: accessToken);
-
-      print('✅ [PROFILE_REPO] Profile fetched successfully');
       return ProfileResult.success(profile: profile);
     } on DioException catch (e) {
       return _handleDioException(e, 'Failed to fetch profile');
     } catch (e) {
-      print('🔴 [PROFILE_REPO] Unexpected error: $e');
       return ProfileResult.failure(message: 'An unexpected error occurred');
     }
   }
@@ -31,16 +26,11 @@ class ProfileRepository {
   /// Create user profile
   Future<ProfileResult> createProfile(UserProfile profile, {required String accessToken}) async {
     try {
-      print('🔵 [PROFILE_REPO] Creating profile for user: ${profile.userId}');
-
       final createdProfile = await _apiClient.createUserProfile(profile, accessToken: accessToken);
-
-      print('✅ [PROFILE_REPO] Profile created successfully');
       return ProfileResult.success(profile: createdProfile);
     } on DioException catch (e) {
       return _handleDioException(e, 'Failed to create profile');
     } catch (e) {
-      print('🔴 [PROFILE_REPO] Unexpected error: $e');
       return ProfileResult.failure(message: 'An unexpected error occurred');
     }
   }
@@ -48,20 +38,15 @@ class ProfileRepository {
   /// Update user profile
   Future<ProfileResult> updateProfile(UserProfile profile, {required String accessToken}) async {
     try {
-      print('🔵 [PROFILE_REPO] Updating profile for user: ${profile.userId}');
-
       final updatedProfile = await _apiClient.updateUserProfile(
         profile.userId,
         profile,
         accessToken: accessToken,
       );
-
-      print('✅ [PROFILE_REPO] Profile updated successfully');
       return ProfileResult.success(profile: updatedProfile);
     } on DioException catch (e) {
       return _handleDioException(e, 'Failed to update profile');
     } catch (e) {
-      print('🔴 [PROFILE_REPO] Unexpected error: $e');
       return ProfileResult.failure(message: 'An unexpected error occurred');
     }
   }
@@ -73,31 +58,21 @@ class ProfileRepository {
     required String accessToken,
   }) async {
     try {
-      print('🔵 [PROFILE_REPO] Uploading profile picture for user: $userId');
-
       final profilePicUrl = await _apiClient.uploadProfilePicture(
         userId,
         filePath,
         accessToken: accessToken,
       );
-
-      print('✅ [PROFILE_REPO] Profile picture uploaded successfully');
       return ProfilePictureResult.success(profilePicUrl: profilePicUrl);
     } on DioException catch (e) {
       return _handlePictureDioException(e, 'Failed to upload profile picture');
     } catch (e) {
-      print('🔴 [PROFILE_REPO] Unexpected error: $e');
       return ProfilePictureResult.failure(message: 'An unexpected error occurred');
     }
   }
 
   /// Handle Dio exceptions for profile operations
   ProfileResult _handleDioException(DioException e, String defaultMessage) {
-    print('🔴 [PROFILE_REPO] DioException:');
-    print('  - Type: ${e.type}');
-    print('  - Status Code: ${e.response?.statusCode}');
-    print('  - Response Data: ${e.response?.data}');
-
     String errorMessage = defaultMessage;
 
     if (e.response?.statusCode == 400) {
@@ -118,16 +93,11 @@ class ProfileRepository {
       errorMessage = 'Could not connect to server';
     }
 
-    print('❌ [PROFILE_REPO] Error: $errorMessage');
     return ProfileResult.failure(message: errorMessage);
   }
 
   /// Handle Dio exceptions for picture upload
   ProfilePictureResult _handlePictureDioException(DioException e, String defaultMessage) {
-    print('🔴 [PROFILE_REPO] DioException:');
-    print('  - Type: ${e.type}');
-    print('  - Status Code: ${e.response?.statusCode}');
-
     String errorMessage = defaultMessage;
 
     if (e.response?.statusCode == 400) {
@@ -138,7 +108,6 @@ class ProfileRepository {
       errorMessage = 'Authentication required';
     }
 
-    print('❌ [PROFILE_REPO] Error: $errorMessage');
     return ProfilePictureResult.failure(message: errorMessage);
   }
 }
