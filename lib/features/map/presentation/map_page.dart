@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:http/http.dart' as http;
+import 'package:geolocator/geolocator.dart';
 import '../../../core/models/route.dart' as route_model;
 import '../../../core/models/route_point.dart';
 import '../../auth/data/auth_service.dart';
@@ -69,6 +70,10 @@ class _MapPageState extends State<MapPage> {
   String? _pickingPointType; // 'start', 'end', or 'waypoint'
   String? _pointAName;
   String? _pointBName;
+
+  // User location
+  LatLng? _userLocation;
+  bool _isLoadingLocation = false;
 
   // Starting location - Istanbul, Turkey
   static const LatLng _initialCenter = LatLng(41.085706, 29.001534);
@@ -213,10 +218,16 @@ class _MapPageState extends State<MapPage> {
   }
 
   /// Load routes at a specific location
-  Future<void> _loadRoutesAtLocation(double lat, double lon) async {
+  /// Set [forceRefresh] to true to bypass cache (e.g., on pull-to-refresh)
+  Future<void> _loadRoutesAtLocation(double lat, double lon, {bool forceRefresh = false}) async {
     setState(() {
       _isLoading = true;
     });
+
+    // If forcing refresh, clear the route repository cache first
+    if (forceRefresh) {
+      _routeRepository.clearCache();
+    }
 
     final result = await _routeRepository.getNearbyRoutes(
       lat: lat,
@@ -224,6 +235,7 @@ class _MapPageState extends State<MapPage> {
       radius: 5000,
       size: 20,
       accessToken: _authService.accessToken,
+      forceRefresh: forceRefresh,
     );
 
     if (result.success && result.routes != null) {
@@ -239,10 +251,8 @@ class _MapPageState extends State<MapPage> {
           _isLoading = false;
         });
 
-        // Load like status for each route
-        for (var route in _nearbyRoutes) {
-          _loadRouteLikeStatus(route.id);
-        }
+        // Load like status for all routes in parallel
+        _loadAllRouteLikeStatuses(_nearbyRoutes, forceRefresh: forceRefresh);
       }
     } else {
       if (mounted) {
@@ -267,31 +277,61 @@ class _MapPageState extends State<MapPage> {
   }
 
   /// Load nearby routes based on current center
-  Future<void> _loadNearbyRoutes() async {
-    await _loadRoutesAtLocation(_currentCenter.latitude, _currentCenter.longitude);
+  /// Set [forceRefresh] to true to bypass cache (e.g., on manual refresh button)
+  Future<void> _loadNearbyRoutes({bool forceRefresh = false}) async {
+    await _loadRoutesAtLocation(_currentCenter.latitude, _currentCenter.longitude, forceRefresh: forceRefresh);
+  }
+
+  /// Load all like statuses in parallel (batched)
+  Future<void> _loadAllRouteLikeStatuses(List<RunRoute> routes, {bool forceRefresh = false}) async {
+    if (_authService.accessToken == null || routes.isEmpty) return;
+
+    final stopwatch = Stopwatch()..start();
+    const batchSize = 10;
+
+    for (var i = 0; i < routes.length; i += batchSize) {
+      final batchEnd = (i + batchSize < routes.length) ? i + batchSize : routes.length;
+      final batch = routes.sublist(i, batchEnd);
+
+      await Future.wait(
+        batch.map((route) => _loadRouteLikeStatus(route.id, forceRefresh: forceRefresh)),
+      );
+    }
+
+    stopwatch.stop();
+    debugPrint('[MapPage] Loaded like statuses for ${routes.length} routes in ${stopwatch.elapsedMilliseconds}ms');
   }
 
   /// Load like status and count for a route
-  Future<void> _loadRouteLikeStatus(int routeId) async {
+  Future<void> _loadRouteLikeStatus(int routeId, {bool forceRefresh = false}) async {
     if (_authService.accessToken == null) return;
 
-    // Check if liked
-    final isLiked = await _routeRepository.checkIfLiked(
-      routeId: routeId,
-      accessToken: _authService.accessToken!,
-    );
+    try {
+      // Run both calls in parallel
+      final results = await Future.wait([
+        _routeRepository.checkIfLiked(
+          routeId: routeId,
+          accessToken: _authService.accessToken!,
+          forceRefresh: forceRefresh,
+        ),
+        _routeRepository.getLikeCount(
+          routeId: routeId,
+          accessToken: _authService.accessToken,
+          forceRefresh: forceRefresh,
+        ),
+      ]);
 
-    // Get like count
-    final count = await _routeRepository.getLikeCount(
-      routeId: routeId,
-      accessToken: _authService.accessToken,
-    );
+      final isLiked = results[0] as bool;
+      final count = results[1] as int;
 
-    if (mounted) {
-      setState(() {
-        _likedRoutes[routeId] = isLiked;
-        _likeCounts[routeId] = count;
-      });
+      if (mounted) {
+        setState(() {
+          _likedRoutes[routeId] = isLiked;
+          _likeCounts[routeId] = count;
+        });
+      }
+    } catch (e) {
+      // Silently fail - like status is not critical
     }
   }
 
@@ -535,8 +575,8 @@ class _MapPageState extends State<MapPage> {
         _pointBName = null;
       });
 
-      // Refresh nearby routes
-      await _loadNearbyRoutes();
+      // Refresh nearby routes (force refresh to show newly created route)
+      await _loadNearbyRoutes(forceRefresh: true);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -895,7 +935,36 @@ class _MapPageState extends State<MapPage> {
                     ],
                   ),
 
-                // Markers
+                // User location marker (in route creation view)
+                if (_userLocation != null)
+                  MarkerLayer(
+                    markers: [
+                      Marker(
+                        point: _userLocation!,
+                        width: 30,
+                        height: 30,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: Colors.blue,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white, width: 3),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.blue.withValues(alpha: 0.3),
+                                blurRadius: 10,
+                                spreadRadius: 5,
+                              ),
+                            ],
+                          ),
+                          child: const Center(
+                            child: Icon(Icons.person, color: Colors.white, size: 16),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+
+                // Route creation markers
                 MarkerLayer(
                   markers: [
                     if (_pointA != null)
@@ -1216,12 +1285,16 @@ class _MapPageState extends State<MapPage> {
   /// Use current location as starting point
   Future<void> _useCurrentLocation() async {
     try {
-      // Move map to current center and use it as starting point
-      final currentLocation = _mapController.camera.center;
+      // Get actual GPS location
+      final position = await _getCurrentPosition();
+      if (position == null) return;
+
+      final currentLocation = LatLng(position.latitude, position.longitude);
 
       setState(() {
         _pointA = currentLocation;
         _pointAName = 'Loading...';
+        _userLocation = currentLocation;
       });
 
       // Move map to this location
@@ -1247,6 +1320,110 @@ class _MapPageState extends State<MapPage> {
           SnackBar(content: Text('Failed to get location: $e')),
         );
       }
+    }
+  }
+
+  /// Get current GPS position with permission handling
+  Future<Position?> _getCurrentPosition() async {
+    setState(() {
+      _isLoadingLocation = true;
+    });
+
+    try {
+      // Check if location services are enabled
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Location services are disabled. Please enable them in settings.'),
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
+        setState(() {
+          _isLoadingLocation = false;
+        });
+        return null;
+      }
+
+      // Check and request permission
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Location permission denied. Please grant permission to use this feature.'),
+                duration: Duration(seconds: 3),
+              ),
+            );
+          }
+          setState(() {
+            _isLoadingLocation = false;
+          });
+          return null;
+        }
+      }
+
+      if (permission == LocationPermission.deniedForever) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Location permission permanently denied. Please enable it in app settings.'),
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
+        setState(() {
+          _isLoadingLocation = false;
+        });
+        return null;
+      }
+
+      // Get current position
+      final position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          timeLimit: Duration(seconds: 10),
+        ),
+      );
+
+      setState(() {
+        _isLoadingLocation = false;
+        _userLocation = LatLng(position.latitude, position.longitude);
+      });
+
+      return position;
+    } catch (e) {
+      debugPrint('[MapPage] Error getting location: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to get location: $e')),
+        );
+      }
+      setState(() {
+        _isLoadingLocation = false;
+      });
+      return null;
+    }
+  }
+
+  /// Navigate to user's current GPS location
+  Future<void> _goToCurrentLocation() async {
+    final position = await _getCurrentPosition();
+    if (position != null && mounted) {
+      final userLatLng = LatLng(position.latitude, position.longitude);
+      _mapController.move(userLatLng, 15.0);
+
+      // Update current center for route loading
+      setState(() {
+        _currentCenter = userLatLng;
+      });
+
+      // Optionally load routes near the new location
+      await _loadRoutesAtLocation(position.latitude, position.longitude);
     }
   }
 
@@ -1332,6 +1509,35 @@ class _MapPageState extends State<MapPage> {
                       points: _generatedRoute!.points.map((p) => LatLng(p.latitude, p.longitude)).toList(),
                       strokeWidth: 5.0,
                       color: const Color(0xFF7ED321),
+                    ),
+                  ],
+                ),
+
+              // User location marker
+              if (_userLocation != null)
+                MarkerLayer(
+                  markers: [
+                    Marker(
+                      point: _userLocation!,
+                      width: 30,
+                      height: 30,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Colors.blue,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white, width: 3),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.blue.withValues(alpha: 0.3),
+                              blurRadius: 10,
+                              spreadRadius: 5,
+                            ),
+                          ],
+                        ),
+                        child: const Center(
+                          child: Icon(Icons.person, color: Colors.white, size: 16),
+                        ),
+                      ),
                     ),
                   ],
                 ),
@@ -1600,16 +1806,20 @@ class _MapPageState extends State<MapPage> {
                   FloatingActionButton.small(
                     heroTag: 'my_location',
                     backgroundColor: Colors.white,
-                    onPressed: () {
-                      _mapController.move(_initialCenter, _initialZoom);
-                    },
-                    child: const Icon(Icons.my_location, color: Colors.black87),
+                    onPressed: _isLoadingLocation ? null : _goToCurrentLocation,
+                    child: _isLoadingLocation
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.my_location, color: Colors.black87),
                   ),
                   const SizedBox(height: 8),
                   FloatingActionButton.small(
                     heroTag: 'refresh',
                     backgroundColor: Colors.white,
-                    onPressed: _loadNearbyRoutes,
+                    onPressed: () => _loadNearbyRoutes(forceRefresh: true),
                     child: const Icon(Icons.refresh, color: Colors.black87),
                   ),
                 ],

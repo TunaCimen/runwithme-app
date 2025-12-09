@@ -29,12 +29,17 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void initState() {
     super.initState();
+    debugPrint('[ChatScreen] initState: otherUserId=${widget.otherUserId}, otherUserName=${widget.otherUserName}');
+
     _chatProvider = ChatProvider();
 
     final token = _authService.accessToken;
+    debugPrint('[ChatScreen] Token present: ${token != null}');
     if (token != null) {
       _chatProvider.setAuthToken(token);
       _chatProvider.openConversation(widget.otherUserId);
+    } else {
+      debugPrint('[ChatScreen] WARNING: No auth token available!');
     }
 
     _scrollController.addListener(_onScroll);

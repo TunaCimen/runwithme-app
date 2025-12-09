@@ -4,17 +4,99 @@ import 'route_api_client.dart';
 import 'models/route_dto.dart';
 
 /// Repository for route business logic and error handling
+/// Uses singleton pattern to share cache across all pages
 class RouteRepository {
+  // Singleton instance
+  static RouteRepository? _instance;
+
+  /// Get the singleton instance
+  static RouteRepository get instance {
+    _instance ??= RouteRepository._internal();
+    return _instance!;
+  }
+
   final RouteApiClient _apiClient;
 
-  RouteRepository({
+  // ==================== Cache ====================
+
+  /// Cache for individual routes by ID
+  final Map<int, Route> _routeCache = {};
+
+  /// Cache for public routes list
+  List<Route>? _publicRoutesCache;
+  int? _publicRoutesTotalCount;
+
+  /// Cache for nearby routes (key: "lat,lon,radius")
+  final Map<String, List<Route>> _nearbyRoutesCache = {};
+  final Map<String, int> _nearbyRoutesTotalCount = {};
+
+  /// Cache for like statuses
+  final Map<int, bool> _likeStatusCache = {};
+  final Map<int, int> _likeCountCache = {};
+
+  /// Cache timestamps for expiry
+  final Map<String, DateTime> _cacheTimestamps = {};
+
+  /// Cache duration (default 5 minutes)
+  static const Duration _cacheDuration = Duration(minutes: 5);
+
+  /// Private constructor for singleton
+  RouteRepository._internal({
     String baseUrl = 'http://35.158.35.102:8080',
     RouteApiClient? apiClient,
   }) : _apiClient = apiClient ?? RouteApiClient(baseUrl: baseUrl);
 
+  /// Factory constructor that returns singleton
+  factory RouteRepository({
+    String baseUrl = 'http://35.158.35.102:8080',
+    RouteApiClient? apiClient,
+  }) {
+    _instance ??= RouteRepository._internal(baseUrl: baseUrl, apiClient: apiClient);
+    return _instance!;
+  }
+
+  // ==================== Cache Management ====================
+
+  /// Check if cache entry is still valid
+  bool _isCacheValid(String cacheKey) {
+    final timestamp = _cacheTimestamps[cacheKey];
+    if (timestamp == null) return false;
+    return DateTime.now().difference(timestamp) < _cacheDuration;
+  }
+
+  /// Update cache timestamp
+  void _updateCacheTimestamp(String cacheKey) {
+    _cacheTimestamps[cacheKey] = DateTime.now();
+  }
+
+  /// Clear all caches (for pull-to-refresh)
+  void clearCache() {
+    _routeCache.clear();
+    _publicRoutesCache = null;
+    _publicRoutesTotalCount = null;
+    _nearbyRoutesCache.clear();
+    _nearbyRoutesTotalCount.clear();
+    _likeStatusCache.clear();
+    _likeCountCache.clear();
+    _cacheTimestamps.clear();
+    print('[RouteRepository] Cache cleared');
+  }
+
+  /// Clear only route list caches (keeps individual routes)
+  void clearListCaches() {
+    _publicRoutesCache = null;
+    _publicRoutesTotalCount = null;
+    _nearbyRoutesCache.clear();
+    _nearbyRoutesTotalCount.clear();
+    _cacheTimestamps.removeWhere((key, _) =>
+      key == 'publicRoutes' || key.startsWith('nearby_'));
+    print('[RouteRepository] List caches cleared');
+  }
+
   // ==================== Routes ====================
 
   /// Get nearby routes with error handling
+  /// Set [forceRefresh] to true to bypass cache (e.g., on pull-to-refresh)
   Future<RouteResult> getNearbyRoutes({
     required double lat,
     required double lon,
@@ -22,7 +104,23 @@ class RouteRepository {
     int page = 0,
     int size = 10,
     String? accessToken,
+    bool forceRefresh = false,
   }) async {
+    // Cache key based on location and radius (round lat/lon to reduce cache misses)
+    final cacheKey = 'nearby_${lat.toStringAsFixed(3)}_${lon.toStringAsFixed(3)}_$radius';
+
+    // Return cached data if valid and not forcing refresh
+    if (!forceRefresh && page == 0 && _isCacheValid(cacheKey)) {
+      final cachedRoutes = _nearbyRoutesCache[cacheKey];
+      if (cachedRoutes != null) {
+        print('[RouteRepository] Returning cached nearby routes (${cachedRoutes.length} routes)');
+        return RouteResult.success(
+          routes: cachedRoutes,
+          totalCount: _nearbyRoutesTotalCount[cacheKey],
+        );
+      }
+    }
+
     try {
       final response = await _apiClient.getNearbyRoutes(
         lat: lat,
@@ -34,6 +132,18 @@ class RouteRepository {
       );
 
       final routes = response.content.map((dto) => dto.toModel()).toList();
+
+      // Cache the results (only first page for simplicity)
+      if (page == 0) {
+        _nearbyRoutesCache[cacheKey] = routes;
+        _nearbyRoutesTotalCount[cacheKey] = response.totalElements;
+        _updateCacheTimestamp(cacheKey);
+
+        // Also cache individual routes
+        for (final route in routes) {
+          _routeCache[route.id] = route;
+        }
+      }
 
       return RouteResult.success(
         routes: routes,
@@ -51,11 +161,27 @@ class RouteRepository {
   }
 
   /// Get public routes with error handling
+  /// Set [forceRefresh] to true to bypass cache (e.g., on pull-to-refresh)
   Future<RouteResult> getPublicRoutes({
     int page = 0,
     int size = 10,
     String? accessToken,
+    bool forceRefresh = false,
   }) async {
+    const cacheKey = 'publicRoutes';
+
+    // Return cached data if valid and not forcing refresh
+    if (!forceRefresh && page == 0 && _isCacheValid(cacheKey)) {
+      final cachedRoutes = _publicRoutesCache;
+      if (cachedRoutes != null) {
+        print('[RouteRepository] Returning cached public routes (${cachedRoutes.length} routes)');
+        return RouteResult.success(
+          routes: cachedRoutes,
+          totalCount: _publicRoutesTotalCount,
+        );
+      }
+    }
+
     try {
       final response = await _apiClient.getPublicRoutes(
         page: page,
@@ -64,6 +190,18 @@ class RouteRepository {
       );
 
       final routes = response.content.map((dto) => dto.toModel()).toList();
+
+      // Cache the results (only first page for simplicity)
+      if (page == 0) {
+        _publicRoutesCache = routes;
+        _publicRoutesTotalCount = response.totalElements;
+        _updateCacheTimestamp(cacheKey);
+
+        // Also cache individual routes
+        for (final route in routes) {
+          _routeCache[route.id] = route;
+        }
+      }
 
       return RouteResult.success(
         routes: routes,
@@ -81,13 +219,32 @@ class RouteRepository {
   }
 
   /// Get route by ID with error handling
+  /// Set [forceRefresh] to true to bypass cache (e.g., on pull-to-refresh)
   Future<SingleRouteResult> getRouteById({
     required int routeId,
     String? accessToken,
+    bool forceRefresh = false,
   }) async {
+    final cacheKey = 'route_$routeId';
+
+    // Return cached data if valid and not forcing refresh
+    if (!forceRefresh && _isCacheValid(cacheKey)) {
+      final cachedRoute = _routeCache[routeId];
+      if (cachedRoute != null) {
+        print('[RouteRepository] Returning cached route $routeId');
+        return SingleRouteResult.success(route: cachedRoute);
+      }
+    }
+
     try {
       final dto = await _apiClient.getRouteById(routeId, accessToken: accessToken);
-      return SingleRouteResult.success(route: dto.toModel());
+      final route = dto.toModel();
+
+      // Cache the route
+      _routeCache[routeId] = route;
+      _updateCacheTimestamp(cacheKey);
+
+      return SingleRouteResult.success(route: route);
     } on DioException catch (e) {
       return SingleRouteResult.failure(message: _handleDioError(e));
     } catch (e) {
@@ -217,6 +374,12 @@ class RouteRepository {
         accessToken: accessToken,
       );
 
+      // Update cache
+      _likeStatusCache[routeId] = true;
+      final currentCount = _likeCountCache[routeId] ?? 0;
+      _likeCountCache[routeId] = currentCount + 1;
+      _updateCacheTimestamp('like_$routeId');
+
       return RouteLikeResult.success(routeLike: dto.toModel());
     } on DioException catch (e) {
       return RouteLikeResult.failure(message: _handleDioError(e));
@@ -238,6 +401,12 @@ class RouteRepository {
         accessToken: accessToken,
       );
 
+      // Update cache
+      _likeStatusCache[routeId] = false;
+      final currentCount = _likeCountCache[routeId] ?? 0;
+      _likeCountCache[routeId] = currentCount > 0 ? currentCount - 1 : 0;
+      _updateCacheTimestamp('like_$routeId');
+
       return RouteLikeResult.success();
     } on DioException catch (e) {
       return RouteLikeResult.failure(message: _handleDioError(e));
@@ -249,31 +418,60 @@ class RouteRepository {
   }
 
   /// Check if route is liked
+  /// Set [forceRefresh] to true to bypass cache
   Future<bool> checkIfLiked({
     required int routeId,
     required String accessToken,
+    bool forceRefresh = false,
   }) async {
+    final cacheKey = 'like_$routeId';
+
+    // Return cached data if valid and not forcing refresh
+    if (!forceRefresh && _isCacheValid(cacheKey) && _likeStatusCache.containsKey(routeId)) {
+      return _likeStatusCache[routeId]!;
+    }
+
     try {
-      return await _apiClient.checkIfLiked(
+      final isLiked = await _apiClient.checkIfLiked(
         routeId: routeId,
         accessToken: accessToken,
       );
+
+      // Cache the result
+      _likeStatusCache[routeId] = isLiked;
+      _updateCacheTimestamp(cacheKey);
+
+      return isLiked;
     } catch (e) {
       return false;
     }
   }
 
   /// Get like count
+  /// Set [forceRefresh] to true to bypass cache
   Future<int> getLikeCount({
     required int routeId,
     String? accessToken,
+    bool forceRefresh = false,
   }) async {
+    final cacheKey = 'likeCount_$routeId';
+
+    // Return cached data if valid and not forcing refresh
+    if (!forceRefresh && _isCacheValid(cacheKey) && _likeCountCache.containsKey(routeId)) {
+      return _likeCountCache[routeId]!;
+    }
+
     try {
       // Try the count endpoint first
       final count = await _apiClient.getLikeCount(
         routeId: routeId,
         accessToken: accessToken,
       );
+
+      // Cache the result
+      _likeCountCache[routeId] = count;
+      _updateCacheTimestamp(cacheKey);
+
       return count;
     } catch (e) {
       // Fallback: use paginated endpoint to get totalElements
@@ -284,31 +482,64 @@ class RouteRepository {
           size: 1,
           accessToken: accessToken,
         );
-        return response.totalElements;
+        final count = response.totalElements;
+
+        // Cache the result
+        _likeCountCache[routeId] = count;
+        _updateCacheTimestamp(cacheKey);
+
+        return count;
       } catch (_) {
         return 0;
       }
     }
   }
 
+  /// Get cached like status without API call (returns null if not cached)
+  bool? getCachedLikeStatus(int routeId) => _likeStatusCache[routeId];
+
+  /// Get cached like count without API call (returns null if not cached)
+  int? getCachedLikeCount(int routeId) => _likeCountCache[routeId];
+
   /// Fetch full route details for a list of routes (to get points)
+  /// Uses parallel requests for better performance
   Future<List<Route>> fetchFullRouteDetails({
     required List<Route> routes,
     String? accessToken,
+    int batchSize = 10, // Limit concurrent requests to avoid overwhelming server
   }) async {
+    if (routes.isEmpty) return [];
+
+    final stopwatch = Stopwatch()..start();
     final fullRoutes = <Route>[];
-    for (var route in routes) {
-      try {
-        final routeDto = await _apiClient.getRouteById(
-          route.id,
-          accessToken: accessToken,
-        );
-        fullRoutes.add(routeDto.toModel());
-      } catch (e) {
-        // If fetching full details fails, use the original route
-        fullRoutes.add(route);
-      }
+
+    // Process routes in batches for controlled parallelism
+    for (var i = 0; i < routes.length; i += batchSize) {
+      final batchEnd = (i + batchSize < routes.length) ? i + batchSize : routes.length;
+      final batch = routes.sublist(i, batchEnd);
+
+      // Fetch batch in parallel
+      final batchResults = await Future.wait(
+        batch.map((route) async {
+          try {
+            final routeDto = await _apiClient.getRouteById(
+              route.id,
+              accessToken: accessToken,
+            );
+            return routeDto.toModel();
+          } catch (e) {
+            // If fetching full details fails, use the original route
+            return route;
+          }
+        }),
+      );
+
+      fullRoutes.addAll(batchResults);
     }
+
+    stopwatch.stop();
+    print('[RouteRepository] fetchFullRouteDetails: ${routes.length} routes in ${stopwatch.elapsedMilliseconds}ms');
+
     return fullRoutes;
   }
 

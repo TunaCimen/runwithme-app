@@ -27,6 +27,10 @@ class MessageDto {
   });
 
   factory MessageDto.fromJson(Map<String, dynamic> json) {
+    // Debug: print raw JSON to see field names
+    print('[MessageDto] Raw JSON: $json');
+    print('[MessageDto] JSON keys: ${json.keys.toList()}');
+
     return MessageDto(
       id: json['id'] ?? 0,
       senderId: json['senderId'] ?? json['sender_id'] ?? '',

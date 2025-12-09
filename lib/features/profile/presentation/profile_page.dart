@@ -59,6 +59,20 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
     }
   }
 
+  /// Get full URL for profile picture
+  String? _getProfilePicUrl() {
+    final profilePic = _userProfile?.profilePic;
+    if (profilePic == null || profilePic.isEmpty) return null;
+
+    // If it's already a full URL, return as is
+    if (profilePic.startsWith('http://') || profilePic.startsWith('https://')) {
+      return profilePic;
+    }
+
+    // Otherwise, construct the URL
+    return _profileRepository.getProfilePictureUrl(profilePic);
+  }
+
   Future<void> _navigateToEditProfile() async {
     final result = await Navigator.push<UserProfile>(
       context,
@@ -129,16 +143,26 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
                               CircleAvatar(
                                 radius: 45,
                                 backgroundColor: Colors.white,
-                                child: Text(
-                                  _userProfile?.firstName?.isNotEmpty == true
-                                      ? _userProfile!.firstName![0].toUpperCase()
-                                      : currentUser.username[0].toUpperCase(),
-                                  style: const TextStyle(
-                                    fontSize: 36,
-                                    fontWeight: FontWeight.bold,
-                                    color: Color(0xFF7ED321),
-                                  ),
-                                ),
+                                backgroundImage: _getProfilePicUrl() != null
+                                    ? NetworkImage(_getProfilePicUrl()!)
+                                    : null,
+                                onBackgroundImageError: _getProfilePicUrl() != null
+                                    ? (exception, stackTrace) {
+                                        debugPrint('[ProfilePage] Error loading profile pic: $exception');
+                                      }
+                                    : null,
+                                child: _getProfilePicUrl() == null
+                                    ? Text(
+                                        _userProfile?.firstName?.isNotEmpty == true
+                                            ? _userProfile!.firstName![0].toUpperCase()
+                                            : currentUser.username[0].toUpperCase(),
+                                        style: const TextStyle(
+                                          fontSize: 36,
+                                          fontWeight: FontWeight.bold,
+                                          color: Color(0xFF7ED321),
+                                        ),
+                                      )
+                                    : null,
                               ),
                               const SizedBox(height: 8),
                               Text(

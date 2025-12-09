@@ -168,44 +168,43 @@ class FriendsProvider extends ChangeNotifier {
     return enrichedRequests;
   }
 
-  /// Enrich friendships with profile data
-  Future<List<FriendshipDto>> _enrichFriendships(
-    List<FriendshipDto> friendships,
-    String currentUserId,
-  ) async {
+  /// Get cached profile
+  UserProfile? getCachedProfile(String userId) => _profileCache[userId];
+
+  /// Enrich friendships with profile data (profile pics)
+  Future<List<FriendshipDto>> _enrichFriendships(List<FriendshipDto> friendships) async {
+    _log('_enrichFriendships called: ${friendships.length} friendships');
     final enrichedFriendships = <FriendshipDto>[];
 
     for (final friendship in friendships) {
-      final friendId = friendship.getFriendId(currentUserId);
-      final profile = await _fetchAndCacheProfile(friendId);
+      final userId = friendship.friendUserId;
+      _log('  Processing friendship: friendUserId=$userId, existing profilePic=${friendship.friendProfilePic}');
 
-      if (profile != null) {
-        // Determine which user field to update
-        if (friendship.user1Id == friendId) {
-          enrichedFriendships.add(friendship.copyWith(
-            user1Username: profile.firstName ?? profile.lastName ?? 'User',
-            user1FirstName: profile.firstName,
-            user1LastName: profile.lastName,
-            user1ProfilePic: profile.profilePic,
-          ));
+      // Only fetch profile if we don't have profile pic
+      if (friendship.friendProfilePic == null || friendship.friendProfilePic!.isEmpty) {
+        final profile = await _fetchAndCacheProfile(userId);
+
+        if (profile != null && profile.profilePic != null) {
+          _log('    Got profile pic: ${profile.profilePic}');
+          final enriched = friendship.copyWith(
+            friendProfilePic: profile.profilePic,
+            friendFirstName: profile.firstName ?? friendship.friendFirstName,
+            friendLastName: profile.lastName ?? friendship.friendLastName,
+          );
+          enrichedFriendships.add(enriched);
         } else {
-          enrichedFriendships.add(friendship.copyWith(
-            user2Username: profile.firstName ?? profile.lastName ?? 'User',
-            user2FirstName: profile.firstName,
-            user2LastName: profile.lastName,
-            user2ProfilePic: profile.profilePic,
-          ));
+          _log('    No profile pic found');
+          enrichedFriendships.add(friendship);
         }
       } else {
+        _log('    Already has profile pic');
         enrichedFriendships.add(friendship);
       }
     }
 
+    _log('  Enrichment complete: ${enrichedFriendships.length} friendships');
     return enrichedFriendships;
   }
-
-  /// Get cached profile
-  UserProfile? getCachedProfile(String userId) => _profileCache[userId];
 
   /// Load friends list (initial load or refresh)
   Future<void> loadFriends({bool refresh = false}) async {
@@ -229,26 +228,18 @@ class FriendsProvider extends ChangeNotifier {
     _log('  API result: success=${result.success}, content=${result.data?.content.length ?? 0} items');
 
     if (result.success && result.data != null) {
-      // Enrich friendships with profile data
+      // The API returns friend info in a nested "user" object
       List<FriendshipDto> friendships = result.data!.content;
 
-      // Log raw friendship data
+      // Log friendship data
       for (final f in friendships) {
-        _log('    Raw friendship: id=${f.friendshipId}, user1Id=${f.user1Id}, user2Id=${f.user2Id}');
+        _log('    Friendship: friendUserId=${f.friendUserId}, friendUsername=${f.friendUsername}, profilePic=${f.friendProfilePic}');
+        final displayName = f.getFriendDisplayName(_currentUserId ?? '');
+        _log('      -> displayName=$displayName');
       }
 
-      if (_currentUserId != null) {
-        _log('  Enriching friendships...');
-        friendships = await _enrichFriendships(friendships, _currentUserId!);
-      } else {
-        _log('  WARNING: No currentUserId set, cannot enrich friendships!');
-      }
-
-      // Log enriched friendship data
-      for (final f in friendships) {
-        final displayName = _currentUserId != null ? f.getFriendDisplayName(_currentUserId!) : 'N/A';
-        _log('    Enriched friendship: id=${f.friendshipId}, friendDisplayName=$displayName');
-      }
+      // Enrich with profile data (including profile pics)
+      friendships = await _enrichFriendships(friendships);
 
       if (refresh) {
         _friends = friendships;
@@ -517,9 +508,7 @@ class FriendsProvider extends ChangeNotifier {
 
   /// Check if a user is a friend
   bool isFriend(String userId) {
-    return _friends.any(
-      (f) => f.user1Id == userId || f.user2Id == userId,
-    );
+    return _friends.any((f) => f.friendUserId == userId);
   }
 
   /// Check if there's a pending sent request to a user

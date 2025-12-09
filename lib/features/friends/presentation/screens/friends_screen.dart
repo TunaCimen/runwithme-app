@@ -7,6 +7,7 @@ import '../widgets/friend_request_card.dart';
 import '../widgets/sent_request_tile.dart';
 import '../../../profile/presentation/user_profile_page.dart';
 import '../../../chat/presentation/screens/chat_screen.dart';
+import '../../../../core/utils/profile_pic_helper.dart';
 
 /// Main screen for managing friends, requests, and sent requests
 class FriendsScreen extends StatefulWidget {
@@ -184,6 +185,7 @@ class _FriendsScreenState extends State<FriendsScreen>
     final displayName = friendship.getFriendDisplayName(currentUserId);
     final username = friendship.getFriendUsername(currentUserId);
     final profilePic = friendship.getFriendProfilePic(currentUserId);
+    final profilePicUrl = ProfilePicHelper.getProfilePicUrl(profilePic);
 
     return Dismissible(
       key: Key(friendship.friendshipId),
@@ -204,12 +206,12 @@ class _FriendsScreenState extends State<FriendsScreen>
         child: FriendListTile(
           displayName: displayName,
           username: username,
-          profilePicUrl: profilePic,
+          profilePicUrl: profilePicUrl,
           onTap: () => _navigateToProfile(friendId, displayName: displayName, username: username),
           trailing: [
             IconButton(
               icon: Icon(Icons.message_outlined, color: Colors.grey[600]),
-              onPressed: () => _startChat(friendId, displayName: displayName, profilePic: profilePic),
+              onPressed: () => _startChat(friendId, displayName: displayName, profilePicUrl: profilePicUrl),
             ),
           ],
         ),
@@ -524,14 +526,14 @@ class _FriendsScreenState extends State<FriendsScreen>
     );
   }
 
-  void _startChat(String friendId, {String? displayName, String? profilePic}) {
+  void _startChat(String friendId, {String? displayName, String? profilePicUrl}) {
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => ChatScreen(
           otherUserId: friendId,
           otherUserName: displayName ?? 'User',
-          otherProfilePic: profilePic,
+          otherProfilePic: profilePicUrl,
         ),
       ),
     );

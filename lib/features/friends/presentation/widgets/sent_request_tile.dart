@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../data/models/friend_request_dto.dart';
+import '../../../../core/utils/profile_pic_helper.dart';
 
 /// Tile widget for displaying a sent friend request with cancel option
 class SentRequestTile extends StatelessWidget {
@@ -32,24 +33,29 @@ class SentRequestTile extends StatelessWidget {
           padding: const EdgeInsets.all(12),
           child: Row(
             children: [
-              CircleAvatar(
-                radius: 24,
-                backgroundColor: const Color(0xFF7ED321).withValues(alpha: 0.2),
-                backgroundImage: request.receiverProfilePic != null
-                    ? NetworkImage(request.receiverProfilePic!)
-                    : null,
-                child: request.receiverProfilePic == null
-                    ? Text(
-                        request.receiverDisplayName.isNotEmpty
-                            ? request.receiverDisplayName[0].toUpperCase()
-                            : '?',
-                        style: const TextStyle(
-                          color: Color(0xFF7ED321),
-                          fontWeight: FontWeight.bold,
-                          fontSize: 18,
-                        ),
-                      )
-                    : null,
+              Builder(
+                builder: (context) {
+                  final profilePicUrl = ProfilePicHelper.getProfilePicUrl(request.receiverProfilePic);
+                  return CircleAvatar(
+                    radius: 24,
+                    backgroundColor: const Color(0xFF7ED321).withValues(alpha: 0.2),
+                    backgroundImage: profilePicUrl != null
+                        ? NetworkImage(profilePicUrl)
+                        : null,
+                    child: profilePicUrl == null
+                        ? Text(
+                            request.receiverDisplayName.isNotEmpty
+                                ? request.receiverDisplayName[0].toUpperCase()
+                                : '?',
+                            style: const TextStyle(
+                              color: Color(0xFF7ED321),
+                              fontWeight: FontWeight.bold,
+                              fontSize: 18,
+                            ),
+                          )
+                        : null,
+                  );
+                },
               ),
               const SizedBox(width: 12),
               Expanded(

@@ -110,10 +110,13 @@ class FriendsApiClient {
     int page = 0,
     int size = 10,
   }) async {
+    print('[FriendsApiClient] getFriends called: page=$page, size=$size');
     final response = await _dio.get(
       '/api/v1/friends',
       queryParameters: {'page': page, 'size': size},
     );
+    print('[FriendsApiClient] getFriends response status: ${response.statusCode}');
+    print('[FriendsApiClient] getFriends raw response: ${response.data}');
     final data = _decodeResponse(response.data);
     return _parsePaginatedResponse(data, FriendshipDto.fromJson);
   }

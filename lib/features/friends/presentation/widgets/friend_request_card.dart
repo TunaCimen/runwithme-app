@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../data/models/friend_request_dto.dart';
+import '../../../../core/utils/profile_pic_helper.dart';
 
 /// Card widget for displaying a friend request with accept/reject actions
 class FriendRequestCard extends StatelessWidget {
@@ -37,24 +38,29 @@ class FriendRequestCard extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  CircleAvatar(
-                    radius: 24,
-                    backgroundColor: const Color(0xFF7ED321).withValues(alpha: 0.2),
-                    backgroundImage: request.senderProfilePic != null
-                        ? NetworkImage(request.senderProfilePic!)
-                        : null,
-                    child: request.senderProfilePic == null
-                        ? Text(
-                            request.senderDisplayName.isNotEmpty
-                                ? request.senderDisplayName[0].toUpperCase()
-                                : '?',
-                            style: const TextStyle(
-                              color: Color(0xFF7ED321),
-                              fontWeight: FontWeight.bold,
-                              fontSize: 18,
-                            ),
-                          )
-                        : null,
+                  Builder(
+                    builder: (context) {
+                      final profilePicUrl = ProfilePicHelper.getProfilePicUrl(request.senderProfilePic);
+                      return CircleAvatar(
+                        radius: 24,
+                        backgroundColor: const Color(0xFF7ED321).withValues(alpha: 0.2),
+                        backgroundImage: profilePicUrl != null
+                            ? NetworkImage(profilePicUrl)
+                            : null,
+                        child: profilePicUrl == null
+                            ? Text(
+                                request.senderDisplayName.isNotEmpty
+                                    ? request.senderDisplayName[0].toUpperCase()
+                                    : '?',
+                                style: const TextStyle(
+                                  color: Color(0xFF7ED321),
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 18,
+                                ),
+                              )
+                            : null,
+                      );
+                    },
                   ),
                   const SizedBox(width: 12),
                   Expanded(
