@@ -3,6 +3,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import '../../../core/models/route.dart' as route_model;
 import '../../../core/models/user_profile.dart';
+import '../../../core/utils/profile_pic_helper.dart';
 import '../../auth/data/auth_service.dart';
 import '../../map/data/route_repository.dart';
 import '../../profile/data/profile_repository.dart';
@@ -39,16 +40,25 @@ class _MatchesTabState extends State<MatchesTab> {
     _loadPublicRoutes();
   }
 
-  Future<void> _loadPublicRoutes() async {
+  /// Load public routes
+  /// Set [forceRefresh] to true to bypass cache (e.g., on pull-to-refresh)
+  Future<void> _loadPublicRoutes({bool forceRefresh = false}) async {
     setState(() {
       _isLoading = true;
       _errorMessage = null;
     });
 
+    // If forcing refresh, clear the caches first
+    if (forceRefresh) {
+      _routeRepository.clearCache();
+      _profileRepository.clearCache();
+    }
+
     final result = await _routeRepository.getPublicRoutes(
       page: 0,
       size: 50,
       accessToken: _authService.accessToken,
+      forceRefresh: forceRefresh,
     );
 
     if (result.success && result.routes != null) {
@@ -66,13 +76,9 @@ class _MatchesTabState extends State<MatchesTab> {
           _publicRoutes.sort((a, b) => b.createdAt.compareTo(a.createdAt));
         });
 
-        // Load like status and creator profiles for each route
-        for (var route in _publicRoutes) {
-          _loadLikeStatus(route.id);
-          if (route.creatorId != null) {
-            _loadCreatorProfile(route.creatorId!);
-          }
-        }
+        // Load like status and creator profiles for each route in parallel
+        _loadAllLikeStatuses(_publicRoutes, forceRefresh: forceRefresh);
+        _loadAllCreatorProfiles(_publicRoutes, forceRefresh: forceRefresh);
       }
     } else {
       if (mounted) {
@@ -84,22 +90,75 @@ class _MatchesTabState extends State<MatchesTab> {
     }
   }
 
+  /// Load all like statuses in parallel (batched)
+  Future<void> _loadAllLikeStatuses(List<RunRoute> routes, {bool forceRefresh = false}) async {
+    if (_authService.accessToken == null) return;
+
+    final stopwatch = Stopwatch()..start();
+    const batchSize = 10;
+
+    for (var i = 0; i < routes.length; i += batchSize) {
+      final batchEnd = (i + batchSize < routes.length) ? i + batchSize : routes.length;
+      final batch = routes.sublist(i, batchEnd);
+
+      await Future.wait(
+        batch.map((route) => _loadLikeStatus(route.id, forceRefresh: forceRefresh)),
+      );
+    }
+
+    stopwatch.stop();
+    debugPrint('[MatchesTab] Loaded like statuses for ${routes.length} routes in ${stopwatch.elapsedMilliseconds}ms');
+  }
+
+  /// Load all creator profiles in parallel (batched)
+  Future<void> _loadAllCreatorProfiles(List<RunRoute> routes, {bool forceRefresh = false}) async {
+    final stopwatch = Stopwatch()..start();
+
+    // Get unique creator IDs that haven't been loaded yet (unless forcing refresh)
+    final creatorIds = routes
+        .where((r) => r.creatorId != null && (forceRefresh || !_creatorProfiles.containsKey(r.creatorId)))
+        .map((r) => r.creatorId!)
+        .toSet()
+        .toList();
+
+    if (creatorIds.isEmpty) return;
+
+    const batchSize = 10;
+
+    for (var i = 0; i < creatorIds.length; i += batchSize) {
+      final batchEnd = (i + batchSize < creatorIds.length) ? i + batchSize : creatorIds.length;
+      final batch = creatorIds.sublist(i, batchEnd);
+
+      await Future.wait(
+        batch.map((creatorId) => _loadCreatorProfile(creatorId, forceRefresh: forceRefresh)),
+      );
+    }
+
+    stopwatch.stop();
+    debugPrint('[MatchesTab] Loaded ${creatorIds.length} creator profiles in ${stopwatch.elapsedMilliseconds}ms');
+  }
+
   /// Load like status and count for a route
-  Future<void> _loadLikeStatus(int routeId) async {
+  Future<void> _loadLikeStatus(int routeId, {bool forceRefresh = false}) async {
     if (_authService.accessToken == null) return;
 
     try {
-      // Check if liked
-      final isLiked = await _routeRepository.checkIfLiked(
-        routeId: routeId,
-        accessToken: _authService.accessToken!,
-      );
+      // Run both calls in parallel
+      final results = await Future.wait([
+        _routeRepository.checkIfLiked(
+          routeId: routeId,
+          accessToken: _authService.accessToken!,
+          forceRefresh: forceRefresh,
+        ),
+        _routeRepository.getLikeCount(
+          routeId: routeId,
+          accessToken: _authService.accessToken,
+          forceRefresh: forceRefresh,
+        ),
+      ]);
 
-      // Get like count
-      final count = await _routeRepository.getLikeCount(
-        routeId: routeId,
-        accessToken: _authService.accessToken,
-      );
+      final isLiked = results[0] as bool;
+      final count = results[1] as int;
 
       if (mounted) {
         setState(() {
@@ -113,9 +172,9 @@ class _MatchesTabState extends State<MatchesTab> {
   }
 
   /// Load creator profile for a route
-  Future<void> _loadCreatorProfile(String creatorId) async {
-    // Skip if already loaded
-    if (_creatorProfiles.containsKey(creatorId)) return;
+  Future<void> _loadCreatorProfile(String creatorId, {bool forceRefresh = false}) async {
+    // Skip if already loaded (unless forcing refresh)
+    if (!forceRefresh && _creatorProfiles.containsKey(creatorId)) return;
 
     final accessToken = _authService.accessToken;
     if (accessToken == null) return;
@@ -123,6 +182,7 @@ class _MatchesTabState extends State<MatchesTab> {
     final result = await _profileRepository.getProfile(
       creatorId,
       accessToken: accessToken,
+      forceRefresh: forceRefresh,
     );
 
     if (mounted && result.success && result.profile != null) {
@@ -236,7 +296,7 @@ class _MatchesTabState extends State<MatchesTab> {
               ),
               const SizedBox(height: 24),
               ElevatedButton(
-                onPressed: _loadPublicRoutes,
+                onPressed: () => _loadPublicRoutes(forceRefresh: true),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF7ED321),
                   foregroundColor: Colors.white,
@@ -254,7 +314,7 @@ class _MatchesTabState extends State<MatchesTab> {
     }
 
     return RefreshIndicator(
-      onRefresh: _loadPublicRoutes,
+      onRefresh: () => _loadPublicRoutes(forceRefresh: true),
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -368,22 +428,27 @@ class _MatchesTabState extends State<MatchesTab> {
                 padding: const EdgeInsets.all(12),
                 child: Row(
                   children: [
-                    CircleAvatar(
-                      radius: 20,
-                      backgroundColor: const Color(0xFF7ED321),
-                      backgroundImage: creatorProfile?.profilePic != null
-                          ? NetworkImage(creatorProfile!.profilePic!)
-                          : null,
-                      child: creatorProfile?.profilePic == null
-                          ? Text(
-                              _getCreatorInitial(creatorProfile),
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 16,
-                              ),
-                            )
-                          : null,
+                    Builder(
+                      builder: (context) {
+                        final profilePicUrl = ProfilePicHelper.getProfilePicUrl(creatorProfile?.profilePic);
+                        return CircleAvatar(
+                          radius: 20,
+                          backgroundColor: const Color(0xFF7ED321),
+                          backgroundImage: profilePicUrl != null
+                              ? NetworkImage(profilePicUrl)
+                              : null,
+                          child: profilePicUrl == null
+                              ? Text(
+                                  _getCreatorInitial(creatorProfile),
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                  ),
+                                )
+                              : null,
+                        );
+                      },
                     ),
                     const SizedBox(width: 10),
                     Expanded(

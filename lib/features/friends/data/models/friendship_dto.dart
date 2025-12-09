@@ -1,33 +1,44 @@
 /// DTO for established friendships
+///
+/// API returns structure:
+/// {
+///   "user": {
+///     "userId": "...",
+///     "username": "...",
+///     "email": "...",
+///     "createdAt": "...",
+///     "emailVerified": true
+///   },
+///   "friendsSince": "..."
+/// }
 class FriendshipDto {
+  // Friend's info (from nested "user" object)
+  final String friendUserId;
+  final String? friendUsername;
+  final String? friendEmail;
+  final String? friendProfilePic;
+  final String? friendFirstName;
+  final String? friendLastName;
+
+  // Friendship metadata
+  final DateTime friendsSince;
+
+  // Legacy fields for backwards compatibility
   final String friendshipId;
   final String user1Id;
   final String user2Id;
-  final DateTime createdAt;
-
-  // Optional denormalized fields for display
-  final String? user1Username;
-  final String? user1ProfilePic;
-  final String? user1FirstName;
-  final String? user1LastName;
-  final String? user2Username;
-  final String? user2ProfilePic;
-  final String? user2FirstName;
-  final String? user2LastName;
 
   FriendshipDto({
-    required this.friendshipId,
-    required this.user1Id,
-    required this.user2Id,
-    required this.createdAt,
-    this.user1Username,
-    this.user1ProfilePic,
-    this.user1FirstName,
-    this.user1LastName,
-    this.user2Username,
-    this.user2ProfilePic,
-    this.user2FirstName,
-    this.user2LastName,
+    required this.friendUserId,
+    this.friendUsername,
+    this.friendEmail,
+    this.friendProfilePic,
+    this.friendFirstName,
+    this.friendLastName,
+    required this.friendsSince,
+    this.friendshipId = '',
+    this.user1Id = '',
+    this.user2Id = '',
   });
 
   factory FriendshipDto.fromJson(Map<String, dynamic> json) {
@@ -35,105 +46,120 @@ class FriendshipDto {
     print('[FriendshipDto] Raw JSON: $json');
     print('[FriendshipDto] JSON keys: ${json.keys.toList()}');
 
+    // Handle the new API structure with nested "user" object
+    final userObj = json['user'] as Map<String, dynamic>?;
+
+    if (userObj != null) {
+      print('[FriendshipDto] Found nested user object: $userObj');
+      return FriendshipDto(
+        friendUserId: userObj['userId'] ?? userObj['user_id'] ?? userObj['id']?.toString() ?? '',
+        friendUsername: userObj['username'],
+        friendEmail: userObj['email'],
+        friendProfilePic: userObj['profilePic'] ?? userObj['profile_pic'] ?? userObj['profilePicUrl'],
+        friendFirstName: userObj['firstName'] ?? userObj['first_name'],
+        friendLastName: userObj['lastName'] ?? userObj['last_name'],
+        friendsSince: json['friendsSince'] != null
+            ? DateTime.parse(json['friendsSince'])
+            : (json['friends_since'] != null
+                ? DateTime.parse(json['friends_since'])
+                : (json['createdAt'] != null
+                    ? DateTime.parse(json['createdAt'])
+                    : DateTime.now())),
+        friendshipId: json['friendshipId'] ?? json['friendship_id'] ?? json['id']?.toString() ?? '',
+      );
+    }
+
+    // Fallback: Handle old structure with user1Id/user2Id (if backend changes)
+    print('[FriendshipDto] No nested user object, using legacy parsing');
     return FriendshipDto(
-      friendshipId: json['friendshipId'] ?? json['friendship_id'] ?? json['id']?.toString() ?? '',
-      user1Id: json['user1Id'] ?? json['user1_id'] ?? json['userId1'] ?? json['user_id_1'] ?? '',
-      user2Id: json['user2Id'] ?? json['user2_id'] ?? json['userId2'] ?? json['user_id_2'] ?? '',
-      createdAt: json['createdAt'] != null
+      friendUserId: json['user2Id'] ?? json['user2_id'] ?? json['userId2'] ?? '',
+      friendUsername: json['user2Username'] ?? json['user2_username'],
+      friendProfilePic: json['user2ProfilePic'] ?? json['user2_profile_pic'],
+      friendFirstName: json['user2FirstName'] ?? json['user2_first_name'],
+      friendLastName: json['user2LastName'] ?? json['user2_last_name'],
+      friendsSince: json['createdAt'] != null
           ? DateTime.parse(json['createdAt'])
           : (json['created_at'] != null
               ? DateTime.parse(json['created_at'])
               : DateTime.now()),
-      user1Username: json['user1Username'] ?? json['user1_username'],
-      user1ProfilePic: json['user1ProfilePic'] ?? json['user1_profile_pic'],
-      user1FirstName: json['user1FirstName'] ?? json['user1_first_name'],
-      user1LastName: json['user1LastName'] ?? json['user1_last_name'],
-      user2Username: json['user2Username'] ?? json['user2_username'],
-      user2ProfilePic: json['user2ProfilePic'] ?? json['user2_profile_pic'],
-      user2FirstName: json['user2FirstName'] ?? json['user2_first_name'],
-      user2LastName: json['user2LastName'] ?? json['user2_last_name'],
+      friendshipId: json['friendshipId'] ?? json['friendship_id'] ?? json['id']?.toString() ?? '',
+      user1Id: json['user1Id'] ?? json['user1_id'] ?? '',
+      user2Id: json['user2Id'] ?? json['user2_id'] ?? '',
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
-      'friendshipId': friendshipId,
-      'user1Id': user1Id,
-      'user2Id': user2Id,
-      'createdAt': createdAt.toIso8601String(),
-      if (user1Username != null) 'user1Username': user1Username,
-      if (user1ProfilePic != null) 'user1ProfilePic': user1ProfilePic,
-      if (user1FirstName != null) 'user1FirstName': user1FirstName,
-      if (user1LastName != null) 'user1LastName': user1LastName,
-      if (user2Username != null) 'user2Username': user2Username,
-      if (user2ProfilePic != null) 'user2ProfilePic': user2ProfilePic,
-      if (user2FirstName != null) 'user2FirstName': user2FirstName,
-      if (user2LastName != null) 'user2LastName': user2LastName,
+      'user': {
+        'userId': friendUserId,
+        'username': friendUsername,
+        'email': friendEmail,
+        'profilePic': friendProfilePic,
+        'firstName': friendFirstName,
+        'lastName': friendLastName,
+      },
+      'friendsSince': friendsSince.toIso8601String(),
+      if (friendshipId.isNotEmpty) 'friendshipId': friendshipId,
     };
   }
 
   FriendshipDto copyWith({
+    String? friendUserId,
+    String? friendUsername,
+    String? friendEmail,
+    String? friendProfilePic,
+    String? friendFirstName,
+    String? friendLastName,
+    DateTime? friendsSince,
     String? friendshipId,
-    String? user1Id,
-    String? user2Id,
-    DateTime? createdAt,
-    String? user1Username,
-    String? user1ProfilePic,
-    String? user1FirstName,
-    String? user1LastName,
-    String? user2Username,
-    String? user2ProfilePic,
-    String? user2FirstName,
-    String? user2LastName,
   }) {
     return FriendshipDto(
+      friendUserId: friendUserId ?? this.friendUserId,
+      friendUsername: friendUsername ?? this.friendUsername,
+      friendEmail: friendEmail ?? this.friendEmail,
+      friendProfilePic: friendProfilePic ?? this.friendProfilePic,
+      friendFirstName: friendFirstName ?? this.friendFirstName,
+      friendLastName: friendLastName ?? this.friendLastName,
+      friendsSince: friendsSince ?? this.friendsSince,
       friendshipId: friendshipId ?? this.friendshipId,
-      user1Id: user1Id ?? this.user1Id,
-      user2Id: user2Id ?? this.user2Id,
-      createdAt: createdAt ?? this.createdAt,
-      user1Username: user1Username ?? this.user1Username,
-      user1ProfilePic: user1ProfilePic ?? this.user1ProfilePic,
-      user1FirstName: user1FirstName ?? this.user1FirstName,
-      user1LastName: user1LastName ?? this.user1LastName,
-      user2Username: user2Username ?? this.user2Username,
-      user2ProfilePic: user2ProfilePic ?? this.user2ProfilePic,
-      user2FirstName: user2FirstName ?? this.user2FirstName,
-      user2LastName: user2LastName ?? this.user2LastName,
     );
   }
 
-  /// Get the friend's user ID given the current user's ID
+  /// Get the friend's user ID (simplified - just returns the friend's ID)
   String getFriendId(String currentUserId) {
-    return user1Id == currentUserId ? user2Id : user1Id;
+    // The API already returns only the friend's info, so just return it
+    return friendUserId;
   }
 
-  /// Get the friend's username given the current user's ID
+  /// Get the friend's username
   String? getFriendUsername(String currentUserId) {
-    return user1Id == currentUserId ? user2Username : user1Username;
+    return friendUsername;
   }
 
-  /// Get the friend's profile pic given the current user's ID
+  /// Get the friend's profile pic
   String? getFriendProfilePic(String currentUserId) {
-    return user1Id == currentUserId ? user2ProfilePic : user1ProfilePic;
+    return friendProfilePic;
   }
 
-  /// Get the friend's display name given the current user's ID
+  /// Get the friend's display name
   String getFriendDisplayName(String currentUserId) {
-    if (user1Id == currentUserId) {
-      if (user2FirstName != null || user2LastName != null) {
-        return '${user2FirstName ?? ''} ${user2LastName ?? ''}'.trim();
-      }
-      return user2Username ?? 'Unknown';
-    } else {
-      if (user1FirstName != null || user1LastName != null) {
-        return '${user1FirstName ?? ''} ${user1LastName ?? ''}'.trim();
-      }
-      return user1Username ?? 'Unknown';
+    // First try first/last name
+    if (friendFirstName != null || friendLastName != null) {
+      final name = '${friendFirstName ?? ''} ${friendLastName ?? ''}'.trim();
+      if (name.isNotEmpty) return name;
     }
+    // Fall back to username
+    if (friendUsername != null && friendUsername!.isNotEmpty) {
+      return friendUsername!;
+    }
+    return 'Unknown';
   }
+
+  // Legacy getters for backwards compatibility
+  DateTime get createdAt => friendsSince;
 
   @override
   String toString() {
-    return 'FriendshipDto(friendshipId: $friendshipId, user1Id: $user1Id, user2Id: $user2Id)';
+    return 'FriendshipDto(friendUserId: $friendUserId, friendUsername: $friendUsername, friendsSince: $friendsSince)';
   }
 }

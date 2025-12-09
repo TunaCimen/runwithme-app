@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../data/models/conversation_dto.dart';
+import '../../../../core/utils/profile_pic_helper.dart';
 
 /// Tile widget for displaying a conversation in the list
 class ConversationTile extends StatelessWidget {
@@ -21,15 +22,16 @@ class ConversationTile extends StatelessWidget {
         child: Row(
           children: [
             // Avatar
-            Stack(
-              children: [
-                CircleAvatar(
+            Builder(
+              builder: (context) {
+                final profilePicUrl = ProfilePicHelper.getProfilePicUrl(conversation.otherProfilePic);
+                return CircleAvatar(
                   radius: 28,
                   backgroundColor: const Color(0xFF7ED321).withValues(alpha: 0.2),
-                  backgroundImage: conversation.otherProfilePic != null
-                      ? NetworkImage(conversation.otherProfilePic!)
+                  backgroundImage: profilePicUrl != null
+                      ? NetworkImage(profilePicUrl)
                       : null,
-                  child: conversation.otherProfilePic == null
+                  child: profilePicUrl == null
                       ? Text(
                           conversation.otherDisplayName.isNotEmpty
                               ? conversation.otherDisplayName[0].toUpperCase()
@@ -41,9 +43,8 @@ class ConversationTile extends StatelessWidget {
                           ),
                         )
                       : null,
-                ),
-                // Online indicator (placeholder - would need real-time status)
-              ],
+                );
+              },
             ),
             const SizedBox(width: 12),
 

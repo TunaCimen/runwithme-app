@@ -23,6 +23,10 @@ class ConversationDto {
   });
 
   factory ConversationDto.fromJson(Map<String, dynamic> json) {
+    // Debug: print raw JSON to see field names
+    print('[ConversationDto] Raw JSON: $json');
+    print('[ConversationDto] JSON keys: ${json.keys.toList()}');
+
     return ConversationDto(
       oderId: json['otherId'] ?? json['other_id'] ?? '',
       otherUsername: json['otherUsername'] ?? json['other_username'] ?? 'Unknown',

@@ -1,4 +1,6 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../../core/models/user_profile.dart';
 import '../data/profile_repository.dart';
 import '../../auth/data/auth_service.dart';
@@ -19,6 +21,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
   final _formKey = GlobalKey<FormState>();
   final _authService = AuthService();
   final _profileRepository = ProfileRepository();
+  final _imagePicker = ImagePicker();
 
   late TextEditingController _firstNameController;
   late TextEditingController _lastNameController;
@@ -28,6 +31,11 @@ class _EditProfilePageState extends State<EditProfilePage> {
   String? _expertLevel;
   bool _profileVisibility = true;
   bool _isLoading = false;
+  bool _isUploadingImage = false;
+
+  // Profile picture state
+  File? _selectedImage;
+  String? _profilePicUrl;
 
   final List<String> _expertLevels = [
     'Beginner',
@@ -45,6 +53,19 @@ class _EditProfilePageState extends State<EditProfilePage> {
     _birthday = widget.existingProfile?.birthday;
     _expertLevel = widget.existingProfile?.expertLevel ?? 'Beginner';
     _profileVisibility = widget.existingProfile?.profileVisibility ?? true;
+
+    // Load existing profile picture URL
+    if (widget.existingProfile?.profilePic != null) {
+      _profilePicUrl = _getFullProfilePicUrl(widget.existingProfile!.profilePic!);
+    }
+  }
+
+  /// Get full URL for profile picture
+  String _getFullProfilePicUrl(String filename) {
+    if (filename.startsWith('http://') || filename.startsWith('https://')) {
+      return filename;
+    }
+    return _profileRepository.getProfilePictureUrl(filename);
   }
 
   @override
@@ -53,6 +74,131 @@ class _EditProfilePageState extends State<EditProfilePage> {
     _lastNameController.dispose();
     _pronounsController.dispose();
     super.dispose();
+  }
+
+  /// Show image picker options
+  Future<void> _showImagePickerOptions() async {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ListTile(
+                  leading: const CircleAvatar(
+                    backgroundColor: Color(0xFF7ED321),
+                    child: Icon(Icons.camera_alt, color: Colors.white),
+                  ),
+                  title: const Text('Take Photo'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _pickImage(ImageSource.camera);
+                  },
+                ),
+                ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: Colors.blue[400],
+                    child: const Icon(Icons.photo_library, color: Colors.white),
+                  ),
+                  title: const Text('Choose from Gallery'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _pickImage(ImageSource.gallery);
+                  },
+                ),
+                if (_selectedImage != null || _profilePicUrl != null)
+                  ListTile(
+                    leading: CircleAvatar(
+                      backgroundColor: Colors.red[400],
+                      child: const Icon(Icons.delete, color: Colors.white),
+                    ),
+                    title: const Text('Remove Photo'),
+                    onTap: () {
+                      Navigator.pop(context);
+                      setState(() {
+                        _selectedImage = null;
+                        _profilePicUrl = null;
+                      });
+                    },
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  /// Pick image from camera or gallery
+  Future<void> _pickImage(ImageSource source) async {
+    try {
+      final pickedFile = await _imagePicker.pickImage(
+        source: source,
+        maxWidth: 800,
+        maxHeight: 800,
+        imageQuality: 85,
+      );
+
+      if (pickedFile != null) {
+        setState(() {
+          _selectedImage = File(pickedFile.path);
+        });
+
+        // Upload immediately after picking
+        await _uploadProfilePicture();
+      }
+    } catch (e) {
+      debugPrint('[EditProfilePage] Error picking image: $e');
+      _showErrorSnackBar('Failed to pick image: $e');
+    }
+  }
+
+  /// Upload the selected profile picture
+  Future<void> _uploadProfilePicture() async {
+    if (_selectedImage == null) return;
+
+    final user = _authService.currentUser;
+    final accessToken = _authService.accessToken;
+
+    if (user == null || accessToken == null) {
+      _showErrorSnackBar('Authentication required');
+      return;
+    }
+
+    setState(() => _isUploadingImage = true);
+
+    final result = await _profileRepository.uploadProfilePicture(
+      user.userId,
+      _selectedImage!.path,
+      accessToken: accessToken,
+    );
+
+    if (!mounted) return;
+    setState(() => _isUploadingImage = false);
+
+    if (result.success && result.profilePicUrl != null) {
+      setState(() {
+        _profilePicUrl = _getFullProfilePicUrl(result.profilePicUrl!);
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Profile picture uploaded successfully'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } else {
+      _showErrorSnackBar(result.message);
+      // Clear the selected image on failure
+      setState(() {
+        _selectedImage = null;
+      });
+    }
   }
 
   Future<void> _selectBirthday() async {
@@ -97,6 +243,18 @@ class _EditProfilePageState extends State<EditProfilePage> {
 
     setState(() => _isLoading = true);
 
+    // Extract filename from URL for saving
+    String? profilePicFilename;
+    if (_profilePicUrl != null) {
+      // Extract just the filename if it's a full URL
+      final uri = Uri.tryParse(_profilePicUrl!);
+      if (uri != null && uri.pathSegments.isNotEmpty) {
+        profilePicFilename = uri.pathSegments.last;
+      } else {
+        profilePicFilename = _profilePicUrl;
+      }
+    }
+
     final profile = UserProfile(
       userId: user.userId,
       firstName: _firstNameController.text.trim(),
@@ -105,6 +263,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
       birthday: _birthday,
       expertLevel: _expertLevel,
       profileVisibility: _profileVisibility,
+      profilePic: profilePicFilename,
     );
 
     final result = widget.existingProfile == null
@@ -152,41 +311,88 @@ class _EditProfilePageState extends State<EditProfilePage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // Profile Picture Placeholder
+                // Profile Picture
                 Center(
-                  child: Stack(
-                    children: [
-                      Container(
-                        width: 120,
-                        height: 120,
-                        decoration: BoxDecoration(
-                          color: Colors.grey[200],
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(
-                          Icons.person,
-                          size: 60,
-                          color: Colors.grey[400],
-                        ),
-                      ),
-                      Positioned(
-                        right: 0,
-                        bottom: 0,
-                        child: Container(
-                          width: 36,
-                          height: 36,
-                          decoration: const BoxDecoration(
-                            color: Color(0xFF7ED321),
+                  child: GestureDetector(
+                    onTap: _isUploadingImage ? null : _showImagePickerOptions,
+                    child: Stack(
+                      children: [
+                        Container(
+                          width: 120,
+                          height: 120,
+                          decoration: BoxDecoration(
+                            color: Colors.grey[200],
                             shape: BoxShape.circle,
+                            image: _selectedImage != null
+                                ? DecorationImage(
+                                    image: FileImage(_selectedImage!),
+                                    fit: BoxFit.cover,
+                                  )
+                                : _profilePicUrl != null
+                                    ? DecorationImage(
+                                        image: NetworkImage(_profilePicUrl!),
+                                        fit: BoxFit.cover,
+                                        onError: (exception, stackTrace) {
+                                          debugPrint('[EditProfilePage] Error loading profile pic: $exception');
+                                        },
+                                      )
+                                    : null,
                           ),
-                          child: const Icon(
-                            Icons.camera_alt,
-                            size: 20,
-                            color: Colors.white,
-                          ),
+                          child: (_selectedImage == null && _profilePicUrl == null)
+                              ? Icon(
+                                  Icons.person,
+                                  size: 60,
+                                  color: Colors.grey[400],
+                                )
+                              : null,
                         ),
-                      ),
-                    ],
+                        // Loading indicator
+                        if (_isUploadingImage)
+                          Positioned.fill(
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: Colors.black45,
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Center(
+                                child: CircularProgressIndicator(
+                                  color: Colors.white,
+                                  strokeWidth: 3,
+                                ),
+                              ),
+                            ),
+                          ),
+                        // Camera button
+                        if (!_isUploadingImage)
+                          Positioned(
+                            right: 0,
+                            bottom: 0,
+                            child: Container(
+                              width: 36,
+                              height: 36,
+                              decoration: const BoxDecoration(
+                                color: Color(0xFF7ED321),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(
+                                Icons.camera_alt,
+                                size: 20,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Center(
+                  child: Text(
+                    'Tap to change photo',
+                    style: TextStyle(
+                      color: Colors.grey[600],
+                      fontSize: 12,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 32),

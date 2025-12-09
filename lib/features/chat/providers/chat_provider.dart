@@ -2,6 +2,15 @@ import 'package:flutter/foundation.dart';
 import '../data/chat_repository.dart';
 import '../data/models/message_dto.dart';
 import '../data/models/conversation_dto.dart';
+import '../../friends/data/models/friendship_dto.dart';
+
+// Debug flag
+const bool _debugChat = true;
+void _log(String message) {
+  if (_debugChat) {
+    debugPrint('[ChatProvider] $message');
+  }
+}
 
 /// Provider for managing chat state
 class ChatProvider extends ChangeNotifier {
@@ -47,12 +56,18 @@ class ChatProvider extends ChangeNotifier {
 
   /// Set authentication token
   void setAuthToken(String token) {
+    _log('setAuthToken called: token=${token.substring(0, token.length > 10 ? 10 : token.length)}...');
     _repository.setAuthToken(token);
   }
 
   /// Load all conversations
   Future<void> loadConversations() async {
-    if (_conversationsLoading) return;
+    _log('loadConversations called');
+
+    if (_conversationsLoading) {
+      _log('  -> Already loading, skipping');
+      return;
+    }
 
     _conversationsLoading = true;
     _conversationsError = null;
@@ -60,8 +75,14 @@ class ChatProvider extends ChangeNotifier {
 
     final result = await _repository.getConversations();
 
+    _log('  API result: success=${result.success}, errorCode=${result.errorCode}, message=${result.message}');
+
     if (result.success && result.data != null) {
       _conversations = result.data!;
+      _log('  Got ${_conversations.length} conversations');
+      for (final c in _conversations) {
+        _log('    Conversation: otherId=${c.oderId}, otherUsername=${c.otherUsername}, otherDisplayName=${c.otherDisplayName}');
+      }
       // Sort by last message time (most recent first)
       _conversations.sort((a, b) {
         final aTime = a.lastMessageAt ?? DateTime.fromMillisecondsSinceEpoch(0);
@@ -70,7 +91,14 @@ class ChatProvider extends ChangeNotifier {
       });
       // Calculate total unread count
       _totalUnreadCount = _conversations.fold(0, (sum, c) => sum + c.unreadCount);
+    } else if (result.errorCode == 'NOT_FOUND') {
+      // No conversations exist yet - this is OK, just show empty state
+      _log('  No conversations found (404) - treating as empty list');
+      _conversations = [];
+      _totalUnreadCount = 0;
+      // Don't set error - this is a normal case for new users
     } else {
+      _log('  Error loading conversations: ${result.message}');
       _conversationsError = result.message;
     }
 
@@ -78,8 +106,77 @@ class ChatProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Build conversations list from friends by checking chat history for each
+  /// This is a workaround until the backend implements GET /conversations
+  Future<void> buildConversationsFromFriends(List<FriendshipDto> friends, String currentUserId) async {
+    _log('buildConversationsFromFriends called: ${friends.length} friends');
+
+    if (_conversationsLoading) {
+      _log('  -> Already loading, skipping');
+      return;
+    }
+
+    _conversationsLoading = true;
+    _conversationsError = null;
+    notifyListeners();
+
+    final List<ConversationDto> builtConversations = [];
+
+    // Check chat history for each friend
+    for (final friend in friends) {
+      final friendId = friend.getFriendId(currentUserId);
+      final friendUsername = friend.getFriendUsername(currentUserId);
+      final friendDisplayName = friend.getFriendDisplayName(currentUserId);
+      final friendProfilePic = friend.getFriendProfilePic(currentUserId);
+
+      _log('  Checking chat history with: $friendUsername ($friendId)');
+
+      try {
+        final result = await _repository.getChatHistory(friendId, page: 0, size: 1);
+
+        if (result.success && result.data != null && result.data!.content.isNotEmpty) {
+          final lastMessage = result.data!.content.first;
+          _log('    -> Has messages, last: "${lastMessage.content.substring(0, lastMessage.content.length > 20 ? 20 : lastMessage.content.length)}..."');
+
+          builtConversations.add(ConversationDto(
+            oderId: friendId,
+            otherUsername: friendUsername ?? friendDisplayName,
+            otherProfilePic: friendProfilePic,
+            otherFirstName: friend.friendFirstName,
+            otherLastName: friend.friendLastName,
+            lastMessage: lastMessage,
+            lastMessageAt: lastMessage.createdAt,
+            unreadCount: 0, // We don't have this info without the backend endpoint
+          ));
+        } else if (result.errorCode == 'NOT_FOUND') {
+          _log('    -> No messages yet');
+        } else {
+          _log('    -> Error: ${result.message}');
+        }
+      } catch (e) {
+        _log('    -> Exception: $e');
+      }
+    }
+
+    // Sort by last message time (most recent first)
+    builtConversations.sort((a, b) {
+      final aTime = a.lastMessageAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+      final bTime = b.lastMessageAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+      return bTime.compareTo(aTime);
+    });
+
+    _conversations = builtConversations;
+    _totalUnreadCount = 0; // We don't have unread counts without backend
+    _log('  Built ${_conversations.length} conversations from friends');
+
+    _conversationsLoading = false;
+    notifyListeners();
+  }
+
   /// Open a conversation with a user
   Future<void> openConversation(String userId) async {
+    _log('openConversation called: userId=$userId');
+
     _activeConversationUserId = userId;
     _currentMessages = [];
     _messagesPage = 0;
@@ -88,14 +185,21 @@ class ChatProvider extends ChangeNotifier {
 
     await loadMessages(refresh: true);
 
-    // Mark conversation as read
+    // Mark conversation as read (ignore errors for new conversations)
+    _log('  Marking conversation as read...');
     await _repository.markConversationAsRead(userId);
     _updateConversationUnread(userId, 0);
+    _log('  openConversation complete: ${_currentMessages.length} messages loaded');
   }
 
   /// Load messages for the current conversation
   Future<void> loadMessages({bool refresh = false}) async {
-    if (_activeConversationUserId == null || _messagesLoading) return;
+    _log('loadMessages called: refresh=$refresh, activeConversationUserId=$_activeConversationUserId');
+
+    if (_activeConversationUserId == null || _messagesLoading) {
+      _log('  -> Skipping: activeConversationUserId=$_activeConversationUserId, messagesLoading=$_messagesLoading');
+      return;
+    }
 
     if (refresh) {
       _messagesPage = 0;
@@ -111,7 +215,10 @@ class ChatProvider extends ChangeNotifier {
       page: _messagesPage,
     );
 
+    _log('  API result: success=${result.success}, errorCode=${result.errorCode}, message=${result.message}');
+
     if (result.success && result.data != null) {
+      _log('  Got ${result.data!.content.length} messages');
       if (refresh) {
         _currentMessages = result.data!.content;
       } else {
@@ -120,7 +227,16 @@ class ChatProvider extends ChangeNotifier {
       }
       _messagesHasMore = !result.data!.last;
       _messagesPage++;
+    } else if (result.errorCode == 'NOT_FOUND') {
+      // No conversation exists yet - this is OK, just show empty state
+      _log('  No conversation found (404) - treating as empty conversation');
+      if (refresh) {
+        _currentMessages = [];
+      }
+      _messagesHasMore = false;
+      // Don't set error - this is a normal case for new conversations
     } else {
+      _log('  Error loading messages: ${result.message}');
       _messagesError = result.message;
     }
 
@@ -136,7 +252,10 @@ class ChatProvider extends ChangeNotifier {
 
   /// Send a message
   Future<ChatResult<MessageDto>> sendMessage(String content) async {
+    _log('sendMessage called: content="${content.substring(0, content.length > 20 ? 20 : content.length)}...", activeConversationUserId=$_activeConversationUserId');
+
     if (_activeConversationUserId == null) {
+      _log('  -> Error: No active conversation');
       return ChatResult.failure(message: 'No active conversation');
     }
 
@@ -148,12 +267,17 @@ class ChatProvider extends ChangeNotifier {
       content: content,
     );
 
+    _log('  API result: success=${result.success}, errorCode=${result.errorCode}, message=${result.message}');
+
     if (result.success && result.data != null) {
+      _log('  Message sent successfully, id=${result.data!.id}');
       // Add message to the beginning of the list (newest first)
       _currentMessages = [result.data!, ..._currentMessages];
 
       // Update conversation in the list
       _updateConversationWithNewMessage(result.data!);
+    } else {
+      _log('  Failed to send message: ${result.message}');
     }
 
     _sendingMessage = false;

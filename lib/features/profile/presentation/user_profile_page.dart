@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../core/models/user_profile.dart';
+import '../../../core/utils/profile_pic_helper.dart';
 import '../../auth/data/auth_service.dart';
 import '../data/profile_repository.dart';
 import '../../friends/data/friends_repository.dart';
@@ -107,7 +108,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
     final friendsResult = await _friendsRepository.getFriends();
     if (friendsResult.success && friendsResult.data != null) {
       final isFriend = friendsResult.data!.content.any(
-        (f) => f.user1Id == widget.userId || f.user2Id == widget.userId,
+        (f) => f.friendUserId == widget.userId,
       );
       if (isFriend) {
         if (mounted) {
@@ -219,7 +220,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
           otherUserName: _userProfile?.fullName.isNotEmpty == true
               ? _userProfile!.fullName
               : widget.username ?? 'User',
-          otherProfilePic: _userProfile?.profilePic,
+          otherProfilePic: ProfilePicHelper.getProfilePicUrl(_userProfile?.profilePic),
         ),
       ),
     );
@@ -312,22 +313,27 @@ class _UserProfilePageState extends State<UserProfilePage> {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           const SizedBox(height: 10),
-          CircleAvatar(
-            radius: 50,
-            backgroundColor: Colors.white,
-            backgroundImage: _userProfile?.profilePic != null
-                ? NetworkImage(_userProfile!.profilePic!)
-                : null,
-            child: _userProfile?.profilePic == null
-                ? Text(
-                    displayName.isNotEmpty ? displayName[0].toUpperCase() : '?',
-                    style: const TextStyle(
-                      fontSize: 40,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF7ED321),
-                    ),
-                  )
-                : null,
+          Builder(
+            builder: (context) {
+              final profilePicUrl = ProfilePicHelper.getProfilePicUrl(_userProfile?.profilePic);
+              return CircleAvatar(
+                radius: 50,
+                backgroundColor: Colors.white,
+                backgroundImage: profilePicUrl != null
+                    ? NetworkImage(profilePicUrl)
+                    : null,
+                child: profilePicUrl == null
+                    ? Text(
+                        displayName.isNotEmpty ? displayName[0].toUpperCase() : '?',
+                        style: const TextStyle(
+                          fontSize: 40,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF7ED321),
+                        ),
+                      )
+                    : null,
+              );
+            },
           ),
           const SizedBox(height: 12),
           Text(

@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import '../../../auth/data/auth_service.dart';
+import '../../../friends/providers/friends_provider.dart';
 import '../../providers/chat_provider.dart';
 import '../widgets/conversation_tile.dart';
 import 'package:runwithme_app/features/chat/presentation/screens/chat_screen.dart';
+import '../../../../core/utils/profile_pic_helper.dart';
 
 /// Screen showing all conversations
 class ConversationsScreen extends StatefulWidget {
@@ -14,17 +16,53 @@ class ConversationsScreen extends StatefulWidget {
 
 class _ConversationsScreenState extends State<ConversationsScreen> {
   late ChatProvider _chatProvider;
+  late FriendsProvider _friendsProvider;
   final _authService = AuthService();
 
   @override
   void initState() {
     super.initState();
+    debugPrint('[ConversationsScreen] initState');
+
     _chatProvider = ChatProvider();
+    _friendsProvider = FriendsProvider();
 
     final token = _authService.accessToken;
+    final currentUser = _authService.currentUser;
+    debugPrint('[ConversationsScreen] Token present: ${token != null}');
+
     if (token != null) {
       _chatProvider.setAuthToken(token);
-      _chatProvider.loadConversations();
+      _friendsProvider.setAuthToken(token);
+
+      if (currentUser != null) {
+        _friendsProvider.setCurrentUserId(currentUser.userId);
+      }
+
+      // Use workaround: build conversations from friends list
+      _loadConversationsFromFriends();
+    } else {
+      debugPrint('[ConversationsScreen] WARNING: No auth token available!');
+    }
+  }
+
+  /// Workaround: Load friends first, then build conversations from chat history
+  Future<void> _loadConversationsFromFriends() async {
+    debugPrint('[ConversationsScreen] Loading conversations from friends...');
+
+    // First load friends
+    await _friendsProvider.loadFriends(refresh: true);
+
+    // Then build conversations by checking chat history for each friend
+    final currentUser = _authService.currentUser;
+    if (currentUser != null && _friendsProvider.friends.isNotEmpty) {
+      await _chatProvider.buildConversationsFromFriends(
+        _friendsProvider.friends,
+        currentUser.userId,
+      );
+    } else {
+      // No friends, just show empty state
+      debugPrint('[ConversationsScreen] No friends to build conversations from');
     }
   }
 
@@ -72,7 +110,7 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
           }
 
           return RefreshIndicator(
-            onRefresh: () => _chatProvider.loadConversations(),
+            onRefresh: _loadConversationsFromFriends,
             child: ListView.builder(
               itemCount: _chatProvider.conversations.length,
               itemBuilder: (context, index) {
@@ -174,7 +212,7 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
             ),
             const SizedBox(height: 24),
             ElevatedButton.icon(
-              onPressed: () => _chatProvider.loadConversations(),
+              onPressed: _loadConversationsFromFriends,
               icon: const Icon(Icons.refresh),
               label: const Text('Try Again'),
               style: ElevatedButton.styleFrom(
@@ -190,72 +228,226 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
 
   void _openConversation(String userId) {
     final conversation = _chatProvider.getConversationWith(userId);
+    final profilePicUrl = ProfilePicHelper.getProfilePicUrl(conversation?.otherProfilePic);
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => ChatScreen(
           otherUserId: userId,
           otherUserName: conversation?.otherDisplayName ?? 'User',
-          otherProfilePic: conversation?.otherProfilePic,
+          otherProfilePic: profilePicUrl,
         ),
       ),
     );
   }
 
   void _showNewConversationSheet() {
+    // Create a FriendsProvider to load friends
+    final friendsProvider = FriendsProvider();
+    final token = _authService.accessToken;
+    final currentUser = _authService.currentUser;
+
+    if (token != null) {
+      friendsProvider.setAuthToken(token);
+      if (currentUser != null) {
+        friendsProvider.setCurrentUserId(currentUser.userId);
+      }
+      friendsProvider.loadFriends(refresh: true);
+    }
+
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (context) {
-        return Container(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'New Conversation',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
+        return DraggableScrollableSheet(
+          initialChildSize: 0.7,
+          minChildSize: 0.4,
+          maxChildSize: 0.9,
+          expand: false,
+          builder: (context, scrollController) {
+            return Column(
+              children: [
+                // Handle bar
+                Container(
+                  margin: const EdgeInsets.only(top: 12),
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[300],
+                    borderRadius: BorderRadius.circular(2),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Start a conversation with a friend or another runner.',
-                style: TextStyle(
-                  color: Colors.grey[600],
-                ),
-              ),
-              const SizedBox(height: 24),
-              Container(
-                padding: const EdgeInsets.all(32),
-                decoration: BoxDecoration(
-                  color: Colors.grey[100],
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Center(
-                  child: Column(
+                // Header
+                Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Row(
                     children: [
-                      Icon(Icons.people_outline,
-                          size: 48, color: Colors.grey[400]),
-                      const SizedBox(height: 12),
-                      Text(
-                        'Select a friend from your\nfriends list to start chatting',
-                        style: TextStyle(color: Colors.grey[600]),
-                        textAlign: TextAlign.center,
+                      const Text(
+                        'New Conversation',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const Spacer(),
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => Navigator.pop(context),
                       ),
                     ],
                   ),
                 ),
-              ),
-              const SizedBox(height: 24),
-            ],
-          ),
+                const Divider(height: 1),
+                // Friends list
+                Expanded(
+                  child: ListenableBuilder(
+                    listenable: friendsProvider,
+                    builder: (context, _) {
+                      if (friendsProvider.friendsLoading && friendsProvider.friends.isEmpty) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+
+                      if (friendsProvider.friendsError != null && friendsProvider.friends.isEmpty) {
+                        return Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(32),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.error_outline, size: 48, color: Colors.red[300]),
+                                const SizedBox(height: 16),
+                                Text(
+                                  friendsProvider.friendsError!,
+                                  style: TextStyle(color: Colors.grey[600]),
+                                  textAlign: TextAlign.center,
+                                ),
+                                const SizedBox(height: 16),
+                                ElevatedButton(
+                                  onPressed: () => friendsProvider.loadFriends(refresh: true),
+                                  child: const Text('Retry'),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      }
+
+                      if (friendsProvider.friends.isEmpty) {
+                        return Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(32),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.people_outline, size: 64, color: Colors.grey[300]),
+                                const SizedBox(height: 16),
+                                const Text(
+                                  'No Friends Yet',
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'Add friends to start chatting with them!',
+                                  style: TextStyle(color: Colors.grey[600]),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      }
+
+                      final currentUserId = currentUser?.userId ?? '';
+
+                      return ListView.builder(
+                        controller: scrollController,
+                        itemCount: friendsProvider.friends.length,
+                        itemBuilder: (context, index) {
+                          final friendship = friendsProvider.friends[index];
+                          final friendId = friendship.getFriendId(currentUserId);
+                          final displayName = friendship.getFriendDisplayName(currentUserId);
+                          final username = friendship.getFriendUsername(currentUserId);
+                          final profilePic = friendship.getFriendProfilePic(currentUserId);
+                          final profilePicUrl = ProfilePicHelper.getProfilePicUrl(profilePic);
+
+                          return ListTile(
+                            leading: CircleAvatar(
+                              radius: 24,
+                              backgroundColor: const Color(0xFF7ED321).withValues(alpha: 0.2),
+                              backgroundImage: profilePicUrl != null ? NetworkImage(profilePicUrl) : null,
+                              child: profilePicUrl == null
+                                  ? Text(
+                                      displayName.isNotEmpty ? displayName[0].toUpperCase() : '?',
+                                      style: const TextStyle(
+                                        color: Color(0xFF7ED321),
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 18,
+                                      ),
+                                    )
+                                  : null,
+                            ),
+                            title: Text(
+                              displayName,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 16,
+                              ),
+                            ),
+                            subtitle: username != null
+                                ? Text(
+                                    '@$username',
+                                    style: TextStyle(
+                                      color: Colors.grey[600],
+                                      fontSize: 14,
+                                    ),
+                                  )
+                                : null,
+                            trailing: const Icon(
+                              Icons.chat_bubble_outline,
+                              color: Color(0xFF7ED321),
+                            ),
+                            onTap: () {
+                              Navigator.pop(context); // Close the bottom sheet
+                              _startConversationWithFriend(
+                                friendId: friendId,
+                                displayName: displayName,
+                                profilePic: profilePicUrl,
+                              );
+                            },
+                          );
+                        },
+                      );
+                    },
+                  ),
+                ),
+              ],
+            );
+          },
         );
       },
+    );
+  }
+
+  void _startConversationWithFriend({
+    required String friendId,
+    required String displayName,
+    String? profilePic,
+  }) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ChatScreen(
+          otherUserId: friendId,
+          otherUserName: displayName,
+          otherProfilePic: profilePic,
+        ),
+      ),
     );
   }
 }

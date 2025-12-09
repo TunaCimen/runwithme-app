@@ -55,10 +55,14 @@ class ChatApiClient {
 
   /// Get all conversations
   Future<List<ConversationDto>> getConversations() async {
+    print('[ChatApiClient] getConversations called');
     final response = await _dio.get('/api/v1/chat/conversations');
+    print('[ChatApiClient] getConversations response status: ${response.statusCode}');
+    print('[ChatApiClient] getConversations raw response: ${response.data}');
     final data = _decodeResponse(response.data);
 
     if (data is List) {
+      print('[ChatApiClient] Response is a List with ${data.length} items');
       return data
           .map((e) => ConversationDto.fromJson(e as Map<String, dynamic>))
           .toList();
@@ -66,11 +70,13 @@ class ChatApiClient {
 
     // Handle paginated response
     if (data is Map && data['content'] != null) {
+      print('[ChatApiClient] Response is paginated with ${(data['content'] as List).length} items');
       return (data['content'] as List)
           .map((e) => ConversationDto.fromJson(e as Map<String, dynamic>))
           .toList();
     }
 
+    print('[ChatApiClient] Response format not recognized, returning empty list');
     return [];
   }
 
@@ -80,20 +86,26 @@ class ChatApiClient {
     int page = 0,
     int size = 20,
   }) async {
+    print('[ChatApiClient] getChatHistory called: otherUserId=$otherUserId, page=$page');
     final response = await _dio.get(
       '/api/v1/chat/history/$otherUserId',
       queryParameters: {'page': page, 'size': size},
     );
+    print('[ChatApiClient] getChatHistory response status: ${response.statusCode}');
+    print('[ChatApiClient] getChatHistory raw response: ${response.data}');
     final data = _decodeResponse(response.data);
     return _parsePaginatedResponse(data, MessageDto.fromJson);
   }
 
   /// Send a message
   Future<MessageDto> sendMessage(SendMessageDto request) async {
+    print('[ChatApiClient] sendMessage called: recipientId=${request.recipientId}');
     final response = await _dio.post(
       '/api/v1/chat/messages',
       data: request.toJson(),
     );
+    print('[ChatApiClient] sendMessage response status: ${response.statusCode}');
+    print('[ChatApiClient] sendMessage raw response: ${response.data}');
     return MessageDto.fromJson(_decodeResponse(response.data));
   }
 
