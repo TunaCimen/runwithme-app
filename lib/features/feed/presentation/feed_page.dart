@@ -256,12 +256,14 @@ class _FeedPageState extends State<FeedPage> with SingleTickerProviderStateMixin
   }
 
   Widget _buildEmptyFeedState() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
+    return SingleChildScrollView(
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
             Icon(
               Icons.fitness_center,
               size: 80,
@@ -304,7 +306,8 @@ class _FeedPageState extends State<FeedPage> with SingleTickerProviderStateMixin
                 ),
               ),
             ),
-          ],
+            ],
+          ),
         ),
       ),
     );

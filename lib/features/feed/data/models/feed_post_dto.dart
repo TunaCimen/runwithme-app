@@ -100,9 +100,28 @@ class FeedPostDto {
   });
 
   factory FeedPostDto.fromJson(Map<String, dynamic> json) {
+    // Handle nested author object if present
+    final author = json['author'] as Map<String, dynamic>?;
+    final runner = json['runner'] as Map<String, dynamic>?;
+    final user = json['user'] as Map<String, dynamic>?;
+    final authorData = author ?? runner ?? user;
+
+    // Extract author info from nested object or flat fields
+    String? authorUsername = json['authorUsername'] ?? json['author_username'];
+    String? authorProfilePic = json['authorProfilePic'] ?? json['author_profile_pic'];
+    String? authorFirstName = json['authorFirstName'] ?? json['author_first_name'];
+    String? authorLastName = json['authorLastName'] ?? json['author_last_name'];
+
+    if (authorData != null) {
+      authorUsername ??= authorData['username'] ?? authorData['userName'];
+      authorProfilePic ??= authorData['profilePic'] ?? authorData['profile_pic'] ?? authorData['profilePicUrl'];
+      authorFirstName ??= authorData['firstName'] ?? authorData['first_name'];
+      authorLastName ??= authorData['lastName'] ?? authorData['last_name'];
+    }
+
     return FeedPostDto(
       id: json['id'] ?? 0,
-      authorId: json['authorId'] ?? json['author_id'] ?? '',
+      authorId: json['authorId'] ?? json['author_id'] ?? json['runnerId'] ?? json['runner_id'] ?? '',
       postType: PostType.fromString(json['postType'] ?? json['post_type'] ?? 'TEXT'),
       routeId: json['routeId'] ?? json['route_id'],
       runSessionId: json['runSessionId'] ?? json['run_session_id'],
@@ -119,10 +138,10 @@ class FeedPostDto {
       commentsCount: json['commentsCount'] ?? json['comments_count'] ?? 0,
       isLikedByCurrentUser:
           json['isLikedByCurrentUser'] ?? json['is_liked_by_current_user'] ?? false,
-      authorUsername: json['authorUsername'] ?? json['author_username'],
-      authorProfilePic: json['authorProfilePic'] ?? json['author_profile_pic'],
-      authorFirstName: json['authorFirstName'] ?? json['author_first_name'],
-      authorLastName: json['authorLastName'] ?? json['author_last_name'],
+      authorUsername: authorUsername,
+      authorProfilePic: authorProfilePic,
+      authorFirstName: authorFirstName,
+      authorLastName: authorLastName,
       routeDistanceM: (json['routeDistanceM'] ?? json['route_distance_m'])?.toDouble(),
       routeDurationS: json['routeDurationS'] ?? json['route_duration_s'],
       routeTitle: json['routeTitle'] ?? json['route_title'],

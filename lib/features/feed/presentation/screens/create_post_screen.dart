@@ -1,8 +1,17 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:image_picker/image_picker.dart';
+import '../../../../core/models/route.dart' as route_model;
 import '../../../auth/data/auth_service.dart';
+import '../../../map/data/route_repository.dart';
+import '../../../profile/data/image_api_client.dart';
 import '../../data/models/feed_post_dto.dart';
 import '../../data/models/create_post_dto.dart';
 import '../../providers/feed_provider.dart';
+
+typedef RunRoute = route_model.Route;
 
 /// Screen for creating a new post
 class CreatePostScreen extends StatefulWidget {
@@ -15,12 +24,25 @@ class CreatePostScreen extends StatefulWidget {
 class _CreatePostScreenState extends State<CreatePostScreen> {
   late FeedProvider _feedProvider;
   final _authService = AuthService();
+  final _routeRepository = RouteRepository();
+  final _imageApiClient = ImageApiClient();
+  final _imagePicker = ImagePicker();
   final _textController = TextEditingController();
 
   PostType _selectedType = PostType.text;
   PostVisibility _visibility = PostVisibility.public;
   int? _selectedRouteId;
   int? _selectedRunSessionId;
+
+  // User's saved routes for selection
+  List<RunRoute> _userRoutes = [];
+  bool _loadingRoutes = false;
+  RunRoute? _selectedRoute;
+
+  // Photo state
+  File? _selectedImage;
+  String? _uploadedImageUrl;
+  bool _uploadingImage = false;
 
   @override
   void initState() {
@@ -30,6 +52,42 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
     final token = _authService.accessToken;
     if (token != null) {
       _feedProvider.setAuthToken(token);
+      _imageApiClient.setAuthToken(token);
+    }
+
+    _loadUserRoutes();
+  }
+
+  Future<void> _loadUserRoutes() async {
+    final user = _authService.currentUser;
+    final accessToken = _authService.accessToken;
+
+    if (user == null || accessToken == null) return;
+
+    setState(() {
+      _loadingRoutes = true;
+    });
+
+    try {
+      final routes = await _routeRepository.getUserLikedRoutes(
+        userId: user.userId,
+        page: 0,
+        size: 50,
+        accessToken: accessToken,
+      );
+
+      if (mounted) {
+        setState(() {
+          _userRoutes = routes;
+          _loadingRoutes = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _loadingRoutes = false;
+        });
+      }
     }
   }
 
@@ -108,6 +166,8 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
               _buildRouteSelector(),
             ],
             const SizedBox(height: 16),
+            _buildPhotoUpload(),
+            const SizedBox(height: 16),
             _buildVisibilitySelector(),
           ],
         ),
@@ -158,12 +218,12 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
           ),
         ),
         const SizedBox(height: 8),
-        Row(
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
           children: [
             _buildTypeChip(PostType.text, Icons.chat_bubble_outline, 'Text'),
-            const SizedBox(width: 8),
             _buildTypeChip(PostType.run, Icons.directions_run, 'Run'),
-            const SizedBox(width: 8),
             _buildTypeChip(PostType.route, Icons.map, 'Route'),
           ],
         ),
@@ -234,6 +294,198 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
     );
   }
 
+  Widget _buildPhotoUpload() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Add Photo (Optional)',
+          style: TextStyle(
+            fontWeight: FontWeight.w600,
+            fontSize: 14,
+            color: Colors.black54,
+          ),
+        ),
+        const SizedBox(height: 8),
+        if (_selectedImage != null) ...[
+          Stack(
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Image.file(
+                  _selectedImage!,
+                  height: 200,
+                  width: double.infinity,
+                  fit: BoxFit.cover,
+                ),
+              ),
+              Positioned(
+                top: 8,
+                right: 8,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.5),
+                    shape: BoxShape.circle,
+                  ),
+                  child: IconButton(
+                    icon: const Icon(Icons.close, color: Colors.white),
+                    onPressed: _removePhoto,
+                  ),
+                ),
+              ),
+              if (_uploadingImage)
+                Positioned.fill(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.5),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Center(
+                      child: CircularProgressIndicator(color: Colors.white),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ] else
+          InkWell(
+            onTap: _showPhotoOptions,
+            borderRadius: BorderRadius.circular(12),
+            child: Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: Colors.grey[100],
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.grey[300]!),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.add_photo_alternate, size: 32, color: Colors.grey[500]),
+                  const SizedBox(width: 12),
+                  Text(
+                    'Add a photo',
+                    style: TextStyle(
+                      color: Colors.grey[600],
+                      fontWeight: FontWeight.w500,
+                      fontSize: 16,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  void _showPhotoOptions() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Add Photo',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                ListTile(
+                  leading: const Icon(Icons.camera_alt, color: Color(0xFF7ED321)),
+                  title: const Text('Take a photo'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _pickImage(ImageSource.camera);
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.photo_library, color: Color(0xFF7ED321)),
+                  title: const Text('Choose from gallery'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _pickImage(ImageSource.gallery);
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _pickImage(ImageSource source) async {
+    try {
+      final pickedFile = await _imagePicker.pickImage(
+        source: source,
+        maxWidth: 1200,
+        maxHeight: 1200,
+        imageQuality: 85,
+      );
+
+      if (pickedFile != null) {
+        setState(() {
+          _selectedImage = File(pickedFile.path);
+        });
+        await _uploadImage();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to pick image: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _uploadImage() async {
+    if (_selectedImage == null) return;
+
+    setState(() {
+      _uploadingImage = true;
+    });
+
+    try {
+      final result = await _imageApiClient.uploadImage(
+        _selectedImage!.path,
+        folder: 'posts',
+      );
+
+      if (mounted) {
+        setState(() {
+          _uploadingImage = false;
+          _uploadedImageUrl = result;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _uploadingImage = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to upload image: $e')),
+        );
+      }
+    }
+  }
+
+  void _removePhoto() {
+    setState(() {
+      _selectedImage = null;
+      _uploadedImageUrl = null;
+    });
+  }
+
   Widget _buildRunSelector() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -286,30 +538,394 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
           ),
         ),
         const SizedBox(height: 8),
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.grey[100],
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Column(
+        if (_loadingRoutes)
+          Container(
+            padding: const EdgeInsets.all(32),
+            decoration: BoxDecoration(
+              color: Colors.grey[100],
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Center(child: CircularProgressIndicator()),
+          )
+        else if (_userRoutes.isEmpty)
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.grey[100],
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Column(
+              children: [
+                Icon(Icons.map, size: 48, color: Colors.grey[400]),
+                const SizedBox(height: 8),
+                Text(
+                  'No routes yet',
+                  style: TextStyle(color: Colors.grey[600]),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Create or save a route to share it',
+                  style: TextStyle(color: Colors.grey[400], fontSize: 12),
+                ),
+              ],
+            ),
+          )
+        else
+          Column(
             children: [
-              Icon(Icons.map, size: 48, color: Colors.grey[400]),
-              const SizedBox(height: 8),
-              Text(
-                'No routes yet',
-                style: TextStyle(color: Colors.grey[600]),
+              // Selected route preview
+              if (_selectedRoute != null) ...[
+                _buildSelectedRouteCard(_selectedRoute!),
+                const SizedBox(height: 12),
+                TextButton.icon(
+                  onPressed: () => _showRouteSelectionSheet(),
+                  icon: const Icon(Icons.swap_horiz),
+                  label: const Text('Change Route'),
+                ),
+              ] else
+                _buildRouteSelectionButton(),
+            ],
+          ),
+      ],
+    );
+  }
+
+  Widget _buildRouteSelectionButton() {
+    return InkWell(
+      onTap: () => _showRouteSelectionSheet(),
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.grey[100],
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.grey[300]!),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF7ED321).withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
               ),
-              const SizedBox(height: 4),
-              Text(
-                'Create or save a route to share it',
-                style: TextStyle(color: Colors.grey[400], fontSize: 12),
+              child: const Icon(Icons.map, color: Color(0xFF7ED321)),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Select a route',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w500,
+                      fontSize: 16,
+                    ),
+                  ),
+                  Text(
+                    '${_userRoutes.length} routes available',
+                    style: TextStyle(
+                      color: Colors.grey[600],
+                      fontSize: 13,
+                    ),
+                  ),
+                ],
               ),
+            ),
+            Icon(Icons.chevron_right, color: Colors.grey[400]),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSelectedRouteCard(RunRoute route) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFF7ED321)),
+      ),
+      child: Column(
+        children: [
+          // Map preview
+          ClipRRect(
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(11)),
+            child: SizedBox(
+              height: 150,
+              child: FlutterMap(
+                options: MapOptions(
+                  initialCenter: LatLng(
+                    (route.startPointLat + route.endPointLat) / 2,
+                    (route.startPointLon + route.endPointLon) / 2,
+                  ),
+                  initialZoom: 13.0,
+                  interactionOptions: const InteractionOptions(
+                    flags: InteractiveFlag.none,
+                  ),
+                ),
+                children: [
+                  TileLayer(
+                    urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                    userAgentPackageName: 'com.example.runwithme_app',
+                  ),
+                  PolylineLayer(
+                    polylines: [
+                      Polyline(
+                        points: route.points.isNotEmpty
+                            ? route.points.map((p) => LatLng(p.latitude, p.longitude)).toList()
+                            : [
+                                LatLng(route.startPointLat, route.startPointLon),
+                                LatLng(route.endPointLat, route.endPointLon),
+                              ],
+                        strokeWidth: 4.0,
+                        color: const Color(0xFF7ED321),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+          // Route info
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        route.title ?? 'Untitled Route',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 15,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Icon(Icons.straighten, size: 14, color: Colors.grey[600]),
+                          const SizedBox(width: 4),
+                          Text(
+                            route.formattedDistance,
+                            style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                          ),
+                          const SizedBox(width: 12),
+                          Icon(Icons.timer, size: 14, color: Colors.grey[600]),
+                          const SizedBox(width: 4),
+                          Text(
+                            route.formattedDuration,
+                            style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const Icon(Icons.check_circle, color: Color(0xFF7ED321)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showRouteSelectionSheet() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return DraggableScrollableSheet(
+          initialChildSize: 0.7,
+          minChildSize: 0.5,
+          maxChildSize: 0.9,
+          expand: false,
+          builder: (context, scrollController) {
+            return Column(
+              children: [
+                // Handle
+                Container(
+                  margin: const EdgeInsets.only(top: 12),
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[300],
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Select a Route',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Expanded(
+                  child: ListView.builder(
+                    controller: scrollController,
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    itemCount: _userRoutes.length,
+                    itemBuilder: (context, index) {
+                      final route = _userRoutes[index];
+                      final isSelected = _selectedRouteId == route.id;
+                      return _buildRouteSelectionTile(route, isSelected);
+                    },
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildRouteSelectionTile(RunRoute route, bool isSelected) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: isSelected ? const Color(0xFF7ED321).withValues(alpha: 0.1) : Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isSelected ? const Color(0xFF7ED321) : Colors.grey[300]!,
+        ),
+      ),
+      child: InkWell(
+        onTap: () {
+          setState(() {
+            _selectedRoute = route;
+            _selectedRouteId = route.id;
+          });
+          Navigator.pop(context);
+        },
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              // Small map preview
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: SizedBox(
+                  width: 60,
+                  height: 60,
+                  child: FlutterMap(
+                    options: MapOptions(
+                      initialCenter: LatLng(
+                        (route.startPointLat + route.endPointLat) / 2,
+                        (route.startPointLon + route.endPointLon) / 2,
+                      ),
+                      initialZoom: 12.0,
+                      interactionOptions: const InteractionOptions(
+                        flags: InteractiveFlag.none,
+                      ),
+                    ),
+                    children: [
+                      TileLayer(
+                        urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                        userAgentPackageName: 'com.example.runwithme_app',
+                      ),
+                      PolylineLayer(
+                        polylines: [
+                          Polyline(
+                            points: route.points.isNotEmpty
+                                ? route.points.map((p) => LatLng(p.latitude, p.longitude)).toList()
+                                : [
+                                    LatLng(route.startPointLat, route.startPointLon),
+                                    LatLng(route.endPointLat, route.endPointLon),
+                                  ],
+                            strokeWidth: 2.0,
+                            color: const Color(0xFF7ED321),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      route.title ?? 'Untitled Route',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 15,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Text(
+                          route.formattedDistance,
+                          style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          '•',
+                          style: TextStyle(color: Colors.grey[400]),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          route.formattedDuration,
+                          style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                        ),
+                      ],
+                    ),
+                    if (route.difficulty != null) ...[
+                      const SizedBox(height: 4),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: _getDifficultyColor(route.difficulty!).withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          route.difficulty!,
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: _getDifficultyColor(route.difficulty!),
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              if (isSelected)
+                const Icon(Icons.check_circle, color: Color(0xFF7ED321)),
             ],
           ),
         ),
-      ],
+      ),
     );
+  }
+
+  Color _getDifficultyColor(String difficulty) {
+    switch (difficulty.toLowerCase()) {
+      case 'easy':
+        return Colors.green;
+      case 'medium':
+        return Colors.orange;
+      case 'hard':
+        return Colors.red;
+      case 'very hard':
+        return Colors.purple;
+      default:
+        return Colors.grey;
+    }
   }
 
   Widget _buildVisibilitySelector() {
@@ -430,11 +1046,26 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
       return;
     }
 
+    // Check if image is still uploading
+    if (_uploadingImage) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please wait for image to finish uploading')),
+      );
+      return;
+    }
+
+    // Determine post type - if we have an uploaded image and it's a text post, switch to photo post
+    var postType = _selectedType;
+    if (_uploadedImageUrl != null && _selectedType == PostType.text) {
+      postType = PostType.photo;
+    }
+
     final request = CreatePostDto(
-      postType: _selectedType,
+      postType: postType,
       textContent: text.isNotEmpty ? text : null,
       routeId: _selectedRouteId,
       runSessionId: _selectedRunSessionId,
+      mediaUrl: _uploadedImageUrl,
       visibility: _visibility,
     );
 

@@ -60,8 +60,8 @@ class ChatProvider extends ChangeNotifier {
     _repository.setAuthToken(token);
   }
 
-  /// Load all conversations
-  Future<void> loadConversations() async {
+  /// Load all conversations by fetching all messages and grouping by user
+  Future<void> loadConversations({String? currentUserId}) async {
     _log('loadConversations called');
 
     if (_conversationsLoading) {
@@ -73,13 +73,18 @@ class ChatProvider extends ChangeNotifier {
     _conversationsError = null;
     notifyListeners();
 
-    final result = await _repository.getConversations();
+    final result = await _repository.getAllMessages();
 
     _log('  API result: success=${result.success}, errorCode=${result.errorCode}, message=${result.message}');
 
     if (result.success && result.data != null) {
-      _conversations = result.data!;
-      _log('  Got ${_conversations.length} conversations');
+      final messages = result.data!;
+      _log('  Got ${messages.length} total messages');
+
+      // Build conversations from messages
+      _conversations = _buildConversationsFromMessages(messages, currentUserId);
+      _log('  Built ${_conversations.length} conversations');
+
       for (final c in _conversations) {
         _log('    Conversation: otherId=${c.oderId}, otherUsername=${c.otherUsername}, otherDisplayName=${c.otherDisplayName}');
       }
@@ -104,6 +109,51 @@ class ChatProvider extends ChangeNotifier {
 
     _conversationsLoading = false;
     notifyListeners();
+  }
+
+  /// Build conversations list from messages
+  List<ConversationDto> _buildConversationsFromMessages(List<MessageDto> messages, String? currentUserId) {
+    final Map<String, ConversationDto> conversationMap = {};
+
+    for (final message in messages) {
+      // Determine the other user in the conversation
+      final otherUserId = message.senderId == currentUserId
+          ? message.recipientId
+          : message.senderId;
+
+      if (!conversationMap.containsKey(otherUserId)) {
+        // Create new conversation entry
+        final isFromOther = message.senderId != currentUserId;
+        conversationMap[otherUserId] = ConversationDto(
+          oderId: otherUserId,
+          otherUsername: (isFromOther ? message.senderUsername : message.recipientUsername) ?? 'Unknown',
+          otherProfilePic: isFromOther ? message.senderProfilePic : message.recipientProfilePic,
+          otherFirstName: isFromOther ? message.senderFirstName : message.recipientFirstName,
+          otherLastName: isFromOther ? message.senderLastName : message.recipientLastName,
+          lastMessage: message,
+          lastMessageAt: message.createdAt,
+          unreadCount: (!message.isRead && isFromOther) ? 1 : 0,
+        );
+      } else {
+        // Update unread count if this is an unread message from the other user
+        final existing = conversationMap[otherUserId]!;
+        final isFromOther = message.senderId != currentUserId;
+        if (!message.isRead && isFromOther) {
+          conversationMap[otherUserId] = existing.copyWith(
+            unreadCount: existing.unreadCount + 1,
+          );
+        }
+        // Update last message if this one is more recent
+        if (message.createdAt.isAfter(existing.lastMessageAt ?? DateTime(1970))) {
+          conversationMap[otherUserId] = existing.copyWith(
+            lastMessage: message,
+            lastMessageAt: message.createdAt,
+          );
+        }
+      }
+    }
+
+    return conversationMap.values.toList();
   }
 
   /// Build conversations list from friends by checking chat history for each

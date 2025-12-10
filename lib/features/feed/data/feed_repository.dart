@@ -155,6 +155,45 @@ class FeedRepository {
     }
   }
 
+  /// Check if current user has liked a post
+  Future<FeedResult<bool>> checkIfLiked(int postId) async {
+    try {
+      final result = await _apiClient.checkIfLiked(postId);
+      return FeedResult.success(result);
+    } on DioException catch (e) {
+      return _handleDioError(e);
+    } catch (e) {
+      return FeedResult.failure(message: e.toString());
+    }
+  }
+
+  /// Get like count for a post
+  Future<FeedResult<int>> getLikeCount(int postId) async {
+    try {
+      final result = await _apiClient.getLikeCount(postId);
+      return FeedResult.success(result);
+    } on DioException catch (e) {
+      return _handleDioError(e);
+    } catch (e) {
+      return FeedResult.failure(message: e.toString());
+    }
+  }
+
+  /// Get public feed
+  Future<FeedResult<PaginatedFeedResponse<FeedPostDto>>> getPublicFeed({
+    int page = 0,
+    int size = 10,
+  }) async {
+    try {
+      final result = await _apiClient.getPublicFeed(page: page, size: size);
+      return FeedResult.success(result);
+    } on DioException catch (e) {
+      return _handleDioError(e);
+    } catch (e) {
+      return FeedResult.failure(message: e.toString());
+    }
+  }
+
   /// Get comments for a post
   Future<FeedResult<PaginatedFeedResponse<CommentDto>>> getComments(
     int postId, {
@@ -188,10 +227,22 @@ class FeedRepository {
   }
 
   /// Delete a comment
-  Future<FeedResult<void>> deleteComment(int postId, int commentId) async {
+  Future<FeedResult<void>> deleteComment(int commentId) async {
     try {
-      await _apiClient.deleteComment(postId, commentId);
+      await _apiClient.deleteComment(commentId);
       return FeedResult.success(null, message: 'Comment deleted');
+    } on DioException catch (e) {
+      return _handleDioError(e);
+    } catch (e) {
+      return FeedResult.failure(message: e.toString());
+    }
+  }
+
+  /// Get comment count for a post
+  Future<FeedResult<int>> getCommentCount(int postId) async {
+    try {
+      final result = await _apiClient.getCommentCount(postId);
+      return FeedResult.success(result);
     } on DioException catch (e) {
       return _handleDioError(e);
     } catch (e) {

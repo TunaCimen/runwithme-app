@@ -7,7 +7,7 @@ class ImageApiClient {
   final String _baseUrl;
 
   ImageApiClient({
-    required String baseUrl,
+    String baseUrl = 'http://35.158.35.102:8080',
     Dio? dio,
   })  : _baseUrl = baseUrl,
         _dio = dio ??
@@ -72,6 +72,57 @@ class ImageApiClient {
     return filename.toString();
   }
 
+  /// Upload an image to a specific folder
+  /// POST /api/v1/images/upload?folder={folder}
+  /// Returns the URL or filename of the uploaded image
+  Future<String> uploadImage(String filePath, {String folder = 'posts'}) async {
+    print('[ImageApiClient] uploadImage called: $filePath to folder: $folder');
+
+    final formData = FormData.fromMap({
+      'file': await MultipartFile.fromFile(
+        filePath,
+        filename: filePath.split('/').last,
+      ),
+    });
+
+    final response = await _dio.post(
+      '/api/v1/images/upload',
+      queryParameters: {'folder': folder},
+      data: formData,
+      options: Options(
+        contentType: 'multipart/form-data',
+      ),
+    );
+
+    print('[ImageApiClient] uploadImage response: ${response.statusCode}');
+    print('[ImageApiClient] uploadImage data: ${response.data}');
+
+    final data = _decodeResponse(response.data);
+
+    // The API might return the URL in different ways
+    final url = data['url'] ??
+        data['imageUrl'] ??
+        data['image_url'] ??
+        data['filename'] ??
+        data['fileName'] ??
+        data['file_name'] ??
+        data['path'];
+
+    if (url == null) {
+      print('[ImageApiClient] Response data keys: ${data.keys.toList()}');
+      throw Exception('No URL returned from upload API. Response: $data');
+    }
+
+    // If the returned value is just a filename, construct the full URL
+    var resultUrl = url.toString();
+    if (!resultUrl.startsWith('http://') && !resultUrl.startsWith('https://')) {
+      resultUrl = '$_baseUrl/api/v1/images/$folder/$resultUrl';
+    }
+
+    print('[ImageApiClient] Uploaded URL: $resultUrl');
+    return resultUrl;
+  }
+
   /// Get the full URL for a profile picture
   /// GET /api/v1/images/profile-pictures/{filename}
   String getProfilePictureUrl(String filename) {
@@ -81,6 +132,16 @@ class ImageApiClient {
     }
     // Otherwise, construct the URL
     return '$_baseUrl/api/v1/images/profile-pictures/$filename';
+  }
+
+  /// Get the full URL for an image in a folder
+  String getImageUrl(String filename, {String folder = 'posts'}) {
+    // If it's already a full URL, return as is
+    if (filename.startsWith('http://') || filename.startsWith('https://')) {
+      return filename;
+    }
+    // Otherwise, construct the URL
+    return '$_baseUrl/api/v1/images/$folder/$filename';
   }
 
   dynamic _decodeResponse(dynamic data) {

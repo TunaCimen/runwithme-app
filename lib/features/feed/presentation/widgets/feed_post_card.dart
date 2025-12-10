@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../core/utils/profile_pic_helper.dart';
 import '../../data/models/feed_post_dto.dart';
 
 /// Card widget for displaying a feed post
@@ -38,10 +39,13 @@ class FeedPostCard extends StatelessWidget {
             _buildHeader(),
             if (post.textContent != null && post.textContent!.isNotEmpty)
               _buildContent(),
+            // Show route preview for run/route type posts
             if (post.postType == PostType.run || post.postType == PostType.route)
               _buildRoutePreview(),
-            if (post.postType == PostType.photo && post.mediaUrl != null)
+            // Show photo if mediaUrl is present (for any post type)
+            if (post.mediaUrl != null && post.mediaUrl!.isNotEmpty)
               _buildPhoto(),
+            // Show stats for run/route type posts
             if (post.postType == PostType.run || post.postType == PostType.route)
               _buildStats(),
             _buildDivider(),
@@ -53,6 +57,7 @@ class FeedPostCard extends StatelessWidget {
   }
 
   Widget _buildHeader() {
+    final profilePicUrl = ProfilePicHelper.getProfilePicUrl(post.authorProfilePic);
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Row(
@@ -62,10 +67,10 @@ class FeedPostCard extends StatelessWidget {
             child: CircleAvatar(
               radius: 20,
               backgroundColor: const Color(0xFF7ED321).withValues(alpha: 0.2),
-              backgroundImage: post.authorProfilePic != null
-                  ? NetworkImage(post.authorProfilePic!)
+              backgroundImage: profilePicUrl != null
+                  ? NetworkImage(profilePicUrl)
                   : null,
-              child: post.authorProfilePic == null
+              child: profilePicUrl == null
                   ? Text(
                       post.authorDisplayName.isNotEmpty
                           ? post.authorDisplayName[0].toUpperCase()
