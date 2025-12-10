@@ -1,7 +1,6 @@
 import 'package:dio/dio.dart';
 import 'chat_api_client.dart';
 import 'models/message_dto.dart';
-import 'models/conversation_dto.dart';
 import 'models/send_message_dto.dart';
 
 /// Result class for chat operations
@@ -49,10 +48,22 @@ class ChatRepository {
     _apiClient.setAuthToken(token);
   }
 
-  /// Get all conversations
-  Future<ChatResult<List<ConversationDto>>> getConversations() async {
+  /// Get all messages for authenticated user
+  Future<ChatResult<List<MessageDto>>> getAllMessages() async {
     try {
-      final result = await _apiClient.getConversations();
+      final result = await _apiClient.getAllMessages();
+      return ChatResult.success(result);
+    } on DioException catch (e) {
+      return _handleDioError(e);
+    } catch (e) {
+      return ChatResult.failure(message: e.toString());
+    }
+  }
+
+  /// Get connected WebSocket users
+  Future<ChatResult<List<String>>> getConnectedUsers() async {
+    try {
+      final result = await _apiClient.getConnectedUsers();
       return ChatResult.success(result);
     } on DioException catch (e) {
       return _handleDioError(e);
@@ -100,10 +111,10 @@ class ChatRepository {
     }
   }
 
-  /// Mark a message as read
-  Future<ChatResult<void>> markAsRead(int messageId) async {
+  /// Mark messages as read
+  Future<ChatResult<void>> markAsRead({String? otherUserId, List<int>? messageIds}) async {
     try {
-      await _apiClient.markAsRead(messageId);
+      await _apiClient.markAsRead(otherUserId: otherUserId, messageIds: messageIds);
       return ChatResult.success(null);
     } on DioException catch (e) {
       return _handleDioError(e);

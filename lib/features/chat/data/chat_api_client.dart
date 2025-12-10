@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'models/message_dto.dart';
-import 'models/conversation_dto.dart';
 import 'models/send_message_dto.dart';
 
 /// Paginated response for chat data
@@ -53,18 +52,18 @@ class ChatApiClient {
     _dio.options.headers.remove('Authorization');
   }
 
-  /// Get all conversations
-  Future<List<ConversationDto>> getConversations() async {
-    print('[ChatApiClient] getConversations called');
-    final response = await _dio.get('/api/v1/chat/conversations');
-    print('[ChatApiClient] getConversations response status: ${response.statusCode}');
-    print('[ChatApiClient] getConversations raw response: ${response.data}');
+  /// Get all chat messages for authenticated user (used to build conversations)
+  Future<List<MessageDto>> getAllMessages() async {
+    print('[ChatApiClient] getAllMessages called');
+    final response = await _dio.get('/api/v1/chat/history');
+    print('[ChatApiClient] getAllMessages response status: ${response.statusCode}');
+    print('[ChatApiClient] getAllMessages raw response: ${response.data}');
     final data = _decodeResponse(response.data);
 
     if (data is List) {
       print('[ChatApiClient] Response is a List with ${data.length} items');
       return data
-          .map((e) => ConversationDto.fromJson(e as Map<String, dynamic>))
+          .map((e) => MessageDto.fromJson(e as Map<String, dynamic>))
           .toList();
     }
 
@@ -72,11 +71,25 @@ class ChatApiClient {
     if (data is Map && data['content'] != null) {
       print('[ChatApiClient] Response is paginated with ${(data['content'] as List).length} items');
       return (data['content'] as List)
-          .map((e) => ConversationDto.fromJson(e as Map<String, dynamic>))
+          .map((e) => MessageDto.fromJson(e as Map<String, dynamic>))
           .toList();
     }
 
     print('[ChatApiClient] Response format not recognized, returning empty list');
+    return [];
+  }
+
+  /// Get connected WebSocket users
+  Future<List<String>> getConnectedUsers() async {
+    print('[ChatApiClient] getConnectedUsers called');
+    final response = await _dio.get('/api/v1/chat/connected-users');
+    print('[ChatApiClient] getConnectedUsers response status: ${response.statusCode}');
+    final data = _decodeResponse(response.data);
+
+    if (data is List) {
+      return data.map((e) => e.toString()).toList();
+    }
+
     return [];
   }
 
@@ -101,7 +114,7 @@ class ChatApiClient {
   Future<MessageDto> sendMessage(SendMessageDto request) async {
     print('[ChatApiClient] sendMessage called: recipientId=${request.recipientId}');
     final response = await _dio.post(
-      '/api/v1/chat/messages',
+      '/api/v1/chat/send',
       data: request.toJson(),
     );
     print('[ChatApiClient] sendMessage response status: ${response.statusCode}');
@@ -109,17 +122,25 @@ class ChatApiClient {
     return MessageDto.fromJson(_decodeResponse(response.data));
   }
 
-  /// Mark a message as read
-  Future<void> markAsRead(int messageId) async {
-    await _dio.put('/api/v1/chat/messages/$messageId/read');
+  /// Mark messages as read
+  /// The request body should contain the message IDs or conversation info to mark as read
+  Future<void> markAsRead({String? otherUserId, List<int>? messageIds}) async {
+    print('[ChatApiClient] markAsRead called: otherUserId=$otherUserId, messageIds=$messageIds');
+    await _dio.post(
+      '/api/v1/chat/read',
+      data: {
+        if (otherUserId != null) 'otherUserId': otherUserId,
+        if (messageIds != null) 'messageIds': messageIds,
+      },
+    );
   }
 
-  /// Mark all messages in a conversation as read
+  /// Mark all messages in a conversation as read (convenience method)
   Future<void> markConversationAsRead(String otherUserId) async {
     try {
-      await _dio.put('/api/v1/chat/conversations/$otherUserId/read');
+      await markAsRead(otherUserId: otherUserId);
     } catch (e) {
-      // Endpoint might not exist, ignore errors
+      print('[ChatApiClient] markConversationAsRead error: $e');
     }
   }
 

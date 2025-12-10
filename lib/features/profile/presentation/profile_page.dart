@@ -4,6 +4,11 @@ import '../../auth/data/auth_service.dart';
 import '../data/profile_repository.dart';
 import '../../map/data/route_repository.dart';
 import '../../friends/presentation/screens/friends_screen.dart';
+import '../../run/presentation/live_tracking_page.dart';
+import '../../feed/data/feed_repository.dart';
+import '../../feed/data/models/feed_post_dto.dart';
+import '../../feed/presentation/widgets/feed_post_card.dart';
+import '../../feed/presentation/screens/post_detail_screen.dart';
 import 'edit_profile_page.dart';
 import 'saved_routes_tab.dart';
 
@@ -19,15 +24,29 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
   final _authService = AuthService();
   final _profileRepository = ProfileRepository();
   final _routeRepository = RouteRepository();
+  final _feedRepository = FeedRepository();
 
   UserProfile? _userProfile;
   bool _isLoading = true;
+
+  // User's posts state
+  List<FeedPostDto> _userPosts = [];
+  bool _postsLoading = false;
+  bool _postsHasMore = true;
+  int _postsPage = 0;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
+
+    final token = _authService.accessToken;
+    if (token != null) {
+      _feedRepository.setAuthToken(token);
+    }
+
     _loadProfile();
+    _loadUserPosts(refresh: true);
   }
 
   @override
@@ -54,6 +73,43 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
         _isLoading = false;
         if (result.success) {
           _userProfile = result.profile;
+        }
+      });
+    }
+  }
+
+  Future<void> _loadUserPosts({bool refresh = false}) async {
+    final user = _authService.currentUser;
+    if (user == null || _postsLoading) return;
+
+    if (refresh) {
+      _postsPage = 0;
+      _postsHasMore = true;
+    }
+
+    if (!_postsHasMore) return;
+
+    setState(() {
+      _postsLoading = true;
+    });
+
+    final result = await _feedRepository.getUserPosts(
+      user.userId,
+      page: _postsPage,
+      size: 10,
+    );
+
+    if (mounted) {
+      setState(() {
+        _postsLoading = false;
+        if (result.success && result.data != null) {
+          if (refresh) {
+            _userPosts = result.data!.content;
+          } else {
+            _userPosts = [..._userPosts, ...result.data!.content];
+          }
+          _postsHasMore = !result.data!.last;
+          _postsPage++;
         }
       });
     }
@@ -226,8 +282,8 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
                 controller: _tabController,
                 tabs: const [
                   Tab(icon: Icon(Icons.directions_run), text: 'Runs'),
+                  Tab(icon: Icon(Icons.article), text: 'Posts'),
                   Tab(icon: Icon(Icons.bar_chart), text: 'Stats'),
-                  Tab(icon: Icon(Icons.emoji_events), text: 'Awards'),
                   Tab(icon: Icon(Icons.favorite), text: 'Saved'),
                 ],
               ),
@@ -242,8 +298,8 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
                     controller: _tabController,
                     children: [
                       _buildRunsTab(),
+                      _buildPostsTab(),
                       _buildStatsTab(),
-                      _buildAwardsTab(),
                       SavedRoutesTab(
                         authService: _authService,
                         routeRepository: _routeRepository,
@@ -337,9 +393,10 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
       message: 'Start tracking your runs to see them here',
       actionLabel: 'Start a Run',
       onAction: () {
-        // Navigate to map page to start a run
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Run tracking coming soon!')),
+        // Navigate to run tracking page
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const LiveTrackingPage()),
         );
       },
     );
@@ -353,11 +410,59 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
     );
   }
 
-  Widget _buildAwardsTab() {
-    return _buildEmptyState(
-      icon: Icons.emoji_events,
-      title: 'No Awards Yet',
-      message: 'Earn awards by completing runs and achieving milestones',
+  Widget _buildPostsTab() {
+    if (_postsLoading && _userPosts.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_userPosts.isEmpty) {
+      return _buildEmptyState(
+        icon: Icons.article_outlined,
+        title: 'No Posts Yet',
+        message: 'Share your runs and routes with your friends',
+        actionLabel: 'Create Post',
+        onAction: () {
+          Navigator.pushNamed(context, '/create-post');
+        },
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: () => _loadUserPosts(refresh: true),
+      child: ListView.builder(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        itemCount: _userPosts.length + (_postsHasMore ? 1 : 0),
+        itemBuilder: (context, index) {
+          if (index >= _userPosts.length) {
+            _loadUserPosts();
+            return const Center(
+              child: Padding(
+                padding: EdgeInsets.all(16),
+                child: CircularProgressIndicator(),
+              ),
+            );
+          }
+          final post = _userPosts[index];
+          return FeedPostCard(
+            post: post,
+            onTap: () => _navigateToPostDetail(post),
+            onLike: () {},
+            onComment: () => _navigateToPostDetail(post),
+          );
+        },
+      ),
+    );
+  }
+
+  void _navigateToPostDetail(FeedPostDto post) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => PostDetailScreen(
+          postId: post.id,
+          initialPost: post,
+        ),
+      ),
     );
   }
 

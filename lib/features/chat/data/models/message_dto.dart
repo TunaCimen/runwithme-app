@@ -13,6 +13,12 @@ class MessageDto {
   final String? senderFirstName;
   final String? senderLastName;
 
+  // Denormalized recipient info for display
+  final String? recipientUsername;
+  final String? recipientProfilePic;
+  final String? recipientFirstName;
+  final String? recipientLastName;
+
   MessageDto({
     required this.id,
     required this.senderId,
@@ -24,6 +30,10 @@ class MessageDto {
     this.senderProfilePic,
     this.senderFirstName,
     this.senderLastName,
+    this.recipientUsername,
+    this.recipientProfilePic,
+    this.recipientFirstName,
+    this.recipientLastName,
   });
 
   factory MessageDto.fromJson(Map<String, dynamic> json) {
@@ -46,6 +56,10 @@ class MessageDto {
       senderProfilePic: json['senderProfilePic'] ?? json['sender_profile_pic'],
       senderFirstName: json['senderFirstName'] ?? json['sender_first_name'],
       senderLastName: json['senderLastName'] ?? json['sender_last_name'],
+      recipientUsername: json['recipientUsername'] ?? json['recipient_username'],
+      recipientProfilePic: json['recipientProfilePic'] ?? json['recipient_profile_pic'],
+      recipientFirstName: json['recipientFirstName'] ?? json['recipient_first_name'],
+      recipientLastName: json['recipientLastName'] ?? json['recipient_last_name'],
     );
   }
 
@@ -71,6 +85,10 @@ class MessageDto {
     String? senderProfilePic,
     String? senderFirstName,
     String? senderLastName,
+    String? recipientUsername,
+    String? recipientProfilePic,
+    String? recipientFirstName,
+    String? recipientLastName,
   }) {
     return MessageDto(
       id: id ?? this.id,
@@ -83,6 +101,10 @@ class MessageDto {
       senderProfilePic: senderProfilePic ?? this.senderProfilePic,
       senderFirstName: senderFirstName ?? this.senderFirstName,
       senderLastName: senderLastName ?? this.senderLastName,
+      recipientUsername: recipientUsername ?? this.recipientUsername,
+      recipientProfilePic: recipientProfilePic ?? this.recipientProfilePic,
+      recipientFirstName: recipientFirstName ?? this.recipientFirstName,
+      recipientLastName: recipientLastName ?? this.recipientLastName,
     );
   }
 

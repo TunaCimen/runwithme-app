@@ -25,6 +25,24 @@ class CommentDto {
   });
 
   factory CommentDto.fromJson(Map<String, dynamic> json) {
+    // Handle nested author object if present
+    final author = json['author'] as Map<String, dynamic>?;
+    final user = json['user'] as Map<String, dynamic>?;
+    final authorData = author ?? user;
+
+    // Extract author info from nested object or flat fields
+    String? authorUsername = json['authorUsername'] ?? json['author_username'];
+    String? authorProfilePic = json['authorProfilePic'] ?? json['author_profile_pic'];
+    String? authorFirstName = json['authorFirstName'] ?? json['author_first_name'];
+    String? authorLastName = json['authorLastName'] ?? json['author_last_name'];
+
+    if (authorData != null) {
+      authorUsername ??= authorData['username'] ?? authorData['userName'];
+      authorProfilePic ??= authorData['profilePic'] ?? authorData['profile_pic'] ?? authorData['profilePicUrl'];
+      authorFirstName ??= authorData['firstName'] ?? authorData['first_name'];
+      authorLastName ??= authorData['lastName'] ?? authorData['last_name'];
+    }
+
     return CommentDto(
       id: json['id'] ?? 0,
       postId: json['postId'] ?? json['post_id'] ?? 0,
@@ -35,10 +53,10 @@ class CommentDto {
           : (json['created_at'] != null
               ? DateTime.parse(json['created_at'])
               : DateTime.now()),
-      authorUsername: json['authorUsername'] ?? json['author_username'],
-      authorProfilePic: json['authorProfilePic'] ?? json['author_profile_pic'],
-      authorFirstName: json['authorFirstName'] ?? json['author_first_name'],
-      authorLastName: json['authorLastName'] ?? json['author_last_name'],
+      authorUsername: authorUsername,
+      authorProfilePic: authorProfilePic,
+      authorFirstName: authorFirstName,
+      authorLastName: authorLastName,
     );
   }
 

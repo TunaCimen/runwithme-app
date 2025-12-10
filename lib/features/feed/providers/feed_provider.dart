@@ -3,10 +3,12 @@ import '../data/feed_repository.dart';
 import '../data/models/feed_post_dto.dart';
 import '../data/models/comment_dto.dart';
 import '../data/models/create_post_dto.dart';
+import '../../profile/data/profile_repository.dart';
 
 /// Provider for managing feed state
 class FeedProvider extends ChangeNotifier {
   final FeedRepository _repository;
+  final ProfileRepository _profileRepository;
 
   // Feed state
   List<FeedPostDto> _feedPosts = [];
@@ -31,10 +33,15 @@ class FeedProvider extends ChangeNotifier {
   bool _deletingPost = false;
   bool _addingComment = false;
 
+  // Auth token for profile fetching
+  String? _authToken;
+
   FeedProvider({
     String baseUrl = 'http://35.158.35.102:8080',
     FeedRepository? repository,
-  }) : _repository = repository ?? FeedRepository(baseUrl: baseUrl);
+    ProfileRepository? profileRepository,
+  }) : _repository = repository ?? FeedRepository(baseUrl: baseUrl),
+       _profileRepository = profileRepository ?? ProfileRepository();
 
   // Getters
   List<FeedPostDto> get feedPosts => _feedPosts;
@@ -52,6 +59,7 @@ class FeedProvider extends ChangeNotifier {
 
   /// Set authentication token
   void setAuthToken(String token) {
+    _authToken = token;
     _repository.setAuthToken(token);
   }
 
@@ -72,10 +80,13 @@ class FeedProvider extends ChangeNotifier {
     final result = await _repository.getFeed(page: _feedPage);
 
     if (result.success && result.data != null) {
+      // Enrich posts with author info
+      final enrichedPosts = await _enrichPostsWithAuthorInfo(result.data!.content);
+
       if (refresh) {
-        _feedPosts = result.data!.content;
+        _feedPosts = enrichedPosts;
       } else {
-        _feedPosts = [..._feedPosts, ...result.data!.content];
+        _feedPosts = [..._feedPosts, ...enrichedPosts];
       }
       _feedHasMore = !result.data!.last;
       _feedPage++;
@@ -86,6 +97,62 @@ class FeedProvider extends ChangeNotifier {
     _feedLoading = false;
     _feedRefreshing = false;
     notifyListeners();
+  }
+
+  /// Enrich posts with author information from profile repository
+  Future<List<FeedPostDto>> _enrichPostsWithAuthorInfo(List<FeedPostDto> posts) async {
+    if (_authToken == null) return posts;
+
+    // Collect unique author IDs that need fetching
+    final authorIdsToFetch = <String>{};
+    for (final post in posts) {
+      if (post.authorId.isNotEmpty && post.authorUsername == null) {
+        authorIdsToFetch.add(post.authorId);
+      }
+    }
+
+    if (authorIdsToFetch.isEmpty) return posts;
+
+    // Fetch profiles for all unique authors
+    final profileCache = <String, Map<String, dynamic>>{};
+    for (final authorId in authorIdsToFetch) {
+      try {
+        final result = await _profileRepository.getProfile(
+          authorId,
+          accessToken: _authToken!,
+        );
+        if (result.success && result.profile != null) {
+          final profile = result.profile!;
+          // Use firstName as username fallback, or construct from name
+          final displayName = profile.fullName.isNotEmpty
+              ? profile.fullName
+              : profile.firstName ?? profile.userId;
+          profileCache[authorId] = {
+            'username': displayName,
+            'firstName': profile.firstName,
+            'lastName': profile.lastName,
+            'profilePic': profile.profilePic,
+          };
+        }
+      } catch (e) {
+        // Ignore errors for individual profile fetches
+        print('[FeedProvider] Failed to fetch profile for $authorId: $e');
+      }
+    }
+
+    // Enrich posts with fetched profile data
+    return posts.map((post) {
+      final authorData = profileCache[post.authorId];
+      if (authorData != null && post.authorUsername == null) {
+        return post.copyWith(
+          authorUsername: authorData['username'],
+          authorFirstName: authorData['firstName'],
+          authorLastName: authorData['lastName'],
+          authorProfilePic: authorData['profilePic'],
+        );
+      }
+      return post;
+    }).toList();
   }
 
   /// Load more feed posts (pagination)
@@ -207,12 +274,15 @@ class FeedProvider extends ChangeNotifier {
     final result = await _repository.getComments(postId, page: page);
 
     if (result.success && result.data != null) {
+      // Enrich comments with author info
+      final enrichedComments = await _enrichCommentsWithAuthorInfo(result.data!.content);
+
       if (refresh || _postComments[postId] == null) {
-        _postComments[postId] = result.data!.content;
+        _postComments[postId] = enrichedComments;
       } else {
         _postComments[postId] = [
           ..._postComments[postId]!,
-          ...result.data!.content,
+          ...enrichedComments,
         ];
       }
       _commentsHasMore[postId] = !result.data!.last;
@@ -221,6 +291,60 @@ class FeedProvider extends ChangeNotifier {
 
     _commentsLoading[postId] = false;
     notifyListeners();
+  }
+
+  /// Enrich comments with author information from profile repository
+  Future<List<CommentDto>> _enrichCommentsWithAuthorInfo(List<CommentDto> comments) async {
+    if (_authToken == null) return comments;
+
+    // Collect unique user IDs that need fetching
+    final userIdsToFetch = <String>{};
+    for (final comment in comments) {
+      if (comment.userId.isNotEmpty && comment.authorUsername == null) {
+        userIdsToFetch.add(comment.userId);
+      }
+    }
+
+    if (userIdsToFetch.isEmpty) return comments;
+
+    // Fetch profiles for all unique users
+    final profileCache = <String, Map<String, dynamic>>{};
+    for (final userId in userIdsToFetch) {
+      try {
+        final result = await _profileRepository.getProfile(
+          userId,
+          accessToken: _authToken!,
+        );
+        if (result.success && result.profile != null) {
+          final profile = result.profile!;
+          final displayName = profile.fullName.isNotEmpty
+              ? profile.fullName
+              : profile.firstName ?? profile.userId;
+          profileCache[userId] = {
+            'username': displayName,
+            'firstName': profile.firstName,
+            'lastName': profile.lastName,
+            'profilePic': profile.profilePic,
+          };
+        }
+      } catch (e) {
+        print('[FeedProvider] Failed to fetch profile for comment user $userId: $e');
+      }
+    }
+
+    // Enrich comments with fetched profile data
+    return comments.map((comment) {
+      final userData = profileCache[comment.userId];
+      if (userData != null && comment.authorUsername == null) {
+        return comment.copyWith(
+          authorUsername: userData['username'],
+          authorFirstName: userData['firstName'],
+          authorLastName: userData['lastName'],
+          authorProfilePic: userData['profilePic'],
+        );
+      }
+      return comment;
+    }).toList();
   }
 
   /// Load more comments for a post
@@ -262,7 +386,7 @@ class FeedProvider extends ChangeNotifier {
 
   /// Delete a comment
   Future<FeedResult<void>> deleteComment(int postId, int commentId) async {
-    final result = await _repository.deleteComment(postId, commentId);
+    final result = await _repository.deleteComment(commentId);
 
     if (result.success) {
       _postComments[postId]?.removeWhere((c) => c.id == commentId);
@@ -278,6 +402,24 @@ class FeedProvider extends ChangeNotifier {
     }
 
     return result;
+  }
+
+  /// Check if current user has liked a post
+  Future<bool> checkIfLiked(int postId) async {
+    final result = await _repository.checkIfLiked(postId);
+    return result.success && result.data == true;
+  }
+
+  /// Get like count for a post
+  Future<int> getLikeCount(int postId) async {
+    final result = await _repository.getLikeCount(postId);
+    return result.success ? (result.data ?? 0) : 0;
+  }
+
+  /// Get comment count for a post
+  Future<int> getCommentCount(int postId) async {
+    final result = await _repository.getCommentCount(postId);
+    return result.success ? (result.data ?? 0) : 0;
   }
 
   /// Clear selected post

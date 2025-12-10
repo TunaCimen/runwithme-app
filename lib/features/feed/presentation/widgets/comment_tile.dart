@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../core/utils/profile_pic_helper.dart';
 import '../../data/models/comment_dto.dart';
 
 /// Tile widget for displaying a comment
@@ -18,6 +19,7 @@ class CommentTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final profilePicUrl = ProfilePicHelper.getProfilePicUrl(comment.authorProfilePic);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Row(
@@ -28,10 +30,10 @@ class CommentTile extends StatelessWidget {
             child: CircleAvatar(
               radius: 16,
               backgroundColor: const Color(0xFF7ED321).withValues(alpha: 0.2),
-              backgroundImage: comment.authorProfilePic != null
-                  ? NetworkImage(comment.authorProfilePic!)
+              backgroundImage: profilePicUrl != null
+                  ? NetworkImage(profilePicUrl)
                   : null,
-              child: comment.authorProfilePic == null
+              child: profilePicUrl == null
                   ? Text(
                       comment.authorDisplayName.isNotEmpty
                           ? comment.authorDisplayName[0].toUpperCase()

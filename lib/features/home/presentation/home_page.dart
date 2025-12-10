@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../feed/presentation/feed_page.dart';
 import '../../map/presentation/map_page.dart';
 import '../../profile/presentation/profile_page.dart';
+import '../../run/presentation/live_tracking_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -25,10 +26,31 @@ class _HomePageState extends State<HomePage> {
     });
   }
 
+  void _startLiveTracking() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const LiveTrackingPage()),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    // Only show Start Run FAB on Map page (index 1)
+    final showStartRunFab = _selectedIndex == 1;
+
     return Scaffold(
       body: _pages[_selectedIndex],
+      floatingActionButton: showStartRunFab
+          ? FloatingActionButton.extended(
+              heroTag: 'startRunFAB',
+              onPressed: _startLiveTracking,
+              backgroundColor: const Color(0xFF7ED321),
+              foregroundColor: Colors.white,
+              icon: const Icon(Icons.play_arrow),
+              label: const Text('Start Run'),
+            )
+          : null,
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           color: Colors.white,

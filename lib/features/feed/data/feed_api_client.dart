@@ -53,13 +53,30 @@ class FeedApiClient {
     _dio.options.headers.remove('Authorization');
   }
 
-  /// Get feed posts (paginated)
+  /// Get personalized feed (paginated)
   Future<PaginatedFeedResponse<FeedPostDto>> getFeed({
     int page = 0,
     int size = 10,
   }) async {
     final response = await _dio.get(
-      '/api/v1/feed',
+      '/api/v1/feed-posts/feed',
+      queryParameters: {'page': page, 'size': size},
+    );
+    final data = _decodeResponse(response.data);
+    // Debug: print first post to see structure
+    if (data['content'] != null && (data['content'] as List).isNotEmpty) {
+      print('[FeedApiClient] First post raw data: ${data['content'][0]}');
+    }
+    return _parsePaginatedResponse(data, FeedPostDto.fromJson);
+  }
+
+  /// Get public feed (paginated)
+  Future<PaginatedFeedResponse<FeedPostDto>> getPublicFeed({
+    int page = 0,
+    int size = 10,
+  }) async {
+    final response = await _dio.get(
+      '/api/v1/feed-posts/public',
       queryParameters: {'page': page, 'size': size},
     );
     final data = _decodeResponse(response.data);
@@ -73,7 +90,7 @@ class FeedApiClient {
     int size = 10,
   }) async {
     final response = await _dio.get(
-      '/api/v1/feed/user/$userId',
+      '/api/v1/feed-posts/user/$userId',
       queryParameters: {'page': page, 'size': size},
     );
     final data = _decodeResponse(response.data);
@@ -82,14 +99,14 @@ class FeedApiClient {
 
   /// Get a single post by ID
   Future<FeedPostDto> getPost(int postId) async {
-    final response = await _dio.get('/api/v1/feed/posts/$postId');
+    final response = await _dio.get('/api/v1/feed-posts/$postId');
     return FeedPostDto.fromJson(_decodeResponse(response.data));
   }
 
   /// Create a new post
   Future<FeedPostDto> createPost(CreatePostDto request) async {
     final response = await _dio.post(
-      '/api/v1/feed/posts',
+      '/api/v1/feed-posts',
       data: request.toJson(),
     );
     return FeedPostDto.fromJson(_decodeResponse(response.data));
@@ -98,7 +115,7 @@ class FeedApiClient {
   /// Update a post
   Future<FeedPostDto> updatePost(int postId, CreatePostDto request) async {
     final response = await _dio.put(
-      '/api/v1/feed/posts/$postId',
+      '/api/v1/feed-posts/$postId',
       data: request.toJson(),
     );
     return FeedPostDto.fromJson(_decodeResponse(response.data));
@@ -106,18 +123,70 @@ class FeedApiClient {
 
   /// Delete a post
   Future<void> deletePost(int postId) async {
-    await _dio.delete('/api/v1/feed/posts/$postId');
+    await _dio.delete('/api/v1/feed-posts/$postId');
   }
+
+  // ============ Feed Post Likes ============
 
   /// Like a post
   Future<void> likePost(int postId) async {
-    await _dio.post('/api/v1/feed/posts/$postId/like');
+    await _dio.post('/api/v1/feed-post-likes/post/$postId');
   }
 
   /// Unlike a post
   Future<void> unlikePost(int postId) async {
-    await _dio.delete('/api/v1/feed/posts/$postId/like');
+    await _dio.delete('/api/v1/feed-post-likes/post/$postId');
   }
+
+  /// Check if current user has liked a post
+  Future<bool> checkIfLiked(int postId) async {
+    final response = await _dio.get('/api/v1/feed-post-likes/post/$postId/check');
+    final data = _decodeResponse(response.data);
+    // The response could be a boolean directly or wrapped in an object
+    if (data is bool) return data;
+    if (data is Map) return data['liked'] ?? data['isLiked'] ?? false;
+    return false;
+  }
+
+  /// Get like count for a post
+  Future<int> getLikeCount(int postId) async {
+    final response = await _dio.get('/api/v1/feed-post-likes/post/$postId/count');
+    final data = _decodeResponse(response.data);
+    // The response could be an int directly or wrapped in an object
+    if (data is int) return data;
+    if (data is Map) return data['count'] ?? data['likeCount'] ?? 0;
+    return 0;
+  }
+
+  /// Get likes for a post (paginated)
+  Future<PaginatedFeedResponse<Map<String, dynamic>>> getPostLikes(
+    int postId, {
+    int page = 0,
+    int size = 20,
+  }) async {
+    final response = await _dio.get(
+      '/api/v1/feed-post-likes/post/$postId',
+      queryParameters: {'page': page, 'size': size},
+    );
+    final data = _decodeResponse(response.data);
+    return _parsePaginatedResponse(data, (json) => json);
+  }
+
+  /// Get likes by user (paginated)
+  Future<PaginatedFeedResponse<Map<String, dynamic>>> getUserLikes(
+    String userId, {
+    int page = 0,
+    int size = 20,
+  }) async {
+    final response = await _dio.get(
+      '/api/v1/feed-post-likes/user/$userId',
+      queryParameters: {'page': page, 'size': size},
+    );
+    final data = _decodeResponse(response.data);
+    return _parsePaginatedResponse(data, (json) => json);
+  }
+
+  // ============ Feed Post Comments ============
 
   /// Get comments for a post (paginated)
   Future<PaginatedFeedResponse<CommentDto>> getComments(
@@ -126,25 +195,64 @@ class FeedApiClient {
     int size = 20,
   }) async {
     final response = await _dio.get(
-      '/api/v1/feed/posts/$postId/comments',
+      '/api/v1/feed-post-comments/post/$postId',
       queryParameters: {'page': page, 'size': size},
     );
     final data = _decodeResponse(response.data);
     return _parsePaginatedResponse(data, CommentDto.fromJson);
   }
 
+  /// Get comment count for a post
+  Future<int> getCommentCount(int postId) async {
+    final response = await _dio.get('/api/v1/feed-post-comments/post/$postId/count');
+    final data = _decodeResponse(response.data);
+    // The response could be an int directly or wrapped in an object
+    if (data is int) return data;
+    if (data is Map) return data['count'] ?? data['commentCount'] ?? 0;
+    return 0;
+  }
+
   /// Add a comment to a post
   Future<CommentDto> addComment(int postId, AddCommentDto request) async {
     final response = await _dio.post(
-      '/api/v1/feed/posts/$postId/comments',
+      '/api/v1/feed-post-comments/post/$postId',
+      data: request.toJson(),
+    );
+    return CommentDto.fromJson(_decodeResponse(response.data));
+  }
+
+  /// Get a comment by ID
+  Future<CommentDto> getComment(int commentId) async {
+    final response = await _dio.get('/api/v1/feed-post-comments/$commentId');
+    return CommentDto.fromJson(_decodeResponse(response.data));
+  }
+
+  /// Update a comment
+  Future<CommentDto> updateComment(int commentId, AddCommentDto request) async {
+    final response = await _dio.put(
+      '/api/v1/feed-post-comments/$commentId',
       data: request.toJson(),
     );
     return CommentDto.fromJson(_decodeResponse(response.data));
   }
 
   /// Delete a comment
-  Future<void> deleteComment(int postId, int commentId) async {
-    await _dio.delete('/api/v1/feed/posts/$postId/comments/$commentId');
+  Future<void> deleteComment(int commentId) async {
+    await _dio.delete('/api/v1/feed-post-comments/$commentId');
+  }
+
+  /// Get comments by user (paginated)
+  Future<PaginatedFeedResponse<CommentDto>> getUserComments(
+    String userId, {
+    int page = 0,
+    int size = 20,
+  }) async {
+    final response = await _dio.get(
+      '/api/v1/feed-post-comments/user/$userId',
+      queryParameters: {'page': page, 'size': size},
+    );
+    final data = _decodeResponse(response.data);
+    return _parsePaginatedResponse(data, CommentDto.fromJson);
   }
 
   dynamic _decodeResponse(dynamic data) {
