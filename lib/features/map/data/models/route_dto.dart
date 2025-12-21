@@ -122,7 +122,9 @@ class RouteDto {
       endPointLat: route.endPointLat,
       endPointLon: route.endPointLon,
       points: route.points.map((p) => RoutePointDto.fromModel(p)).toList(),
-      creatorId: (route.creatorId == null || route.creatorId!.isEmpty) ? null : route.creatorId,
+      creatorId: (route.creatorId == null || route.creatorId!.isEmpty)
+          ? null
+          : route.creatorId,
       createdAt: route.createdAt.toIso8601String(),
       updatedAt: route.updatedAt.toIso8601String(),
     );
@@ -136,12 +138,7 @@ class RoutePointDto {
   final double? longitude;
   final double? elevationM;
 
-  RoutePointDto({
-    this.seqNo,
-    this.latitude,
-    this.longitude,
-    this.elevationM,
-  });
+  RoutePointDto({this.seqNo, this.latitude, this.longitude, this.elevationM});
 
   /// Create from JSON
   factory RoutePointDto.fromJson(Map<String, dynamic> json) {

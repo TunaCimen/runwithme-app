@@ -40,10 +40,14 @@ class FriendRequestCard extends StatelessWidget {
                 children: [
                   Builder(
                     builder: (context) {
-                      final profilePicUrl = ProfilePicHelper.getProfilePicUrl(request.senderProfilePic);
+                      final profilePicUrl = ProfilePicHelper.getProfilePicUrl(
+                        request.senderProfilePic,
+                      );
                       return CircleAvatar(
                         radius: 24,
-                        backgroundColor: const Color(0xFF7ED321).withValues(alpha: 0.2),
+                        backgroundColor: const Color(
+                          0xFF7ED321,
+                        ).withValues(alpha: 0.2),
                         backgroundImage: profilePicUrl != null
                             ? NetworkImage(profilePicUrl)
                             : null,
@@ -87,10 +91,7 @@ class FriendRequestCard extends StatelessWidget {
                   ),
                   Text(
                     _formatTimeAgo(request.createdAt),
-                    style: TextStyle(
-                      color: Colors.grey[500],
-                      fontSize: 12,
-                    ),
+                    style: TextStyle(color: Colors.grey[500], fontSize: 12),
                   ),
                 ],
               ),
@@ -104,10 +105,7 @@ class FriendRequestCard extends StatelessWidget {
                   ),
                   child: Text(
                     request.message!,
-                    style: TextStyle(
-                      color: Colors.grey[700],
-                      fontSize: 14,
-                    ),
+                    style: TextStyle(color: Colors.grey[700], fontSize: 14),
                   ),
                 ),
               ],

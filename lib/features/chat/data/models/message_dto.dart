@@ -37,10 +37,6 @@ class MessageDto {
   });
 
   factory MessageDto.fromJson(Map<String, dynamic> json) {
-    // Debug: print raw JSON to see field names
-    print('[MessageDto] Raw JSON: $json');
-    print('[MessageDto] JSON keys: ${json.keys.toList()}');
-
     return MessageDto(
       id: json['id'] ?? 0,
       senderId: json['senderId'] ?? json['sender_id'] ?? '',
@@ -49,17 +45,21 @@ class MessageDto {
       createdAt: json['createdAt'] != null
           ? DateTime.parse(json['createdAt'])
           : (json['created_at'] != null
-              ? DateTime.parse(json['created_at'])
-              : DateTime.now()),
+                ? DateTime.parse(json['created_at'])
+                : DateTime.now()),
       isRead: json['isRead'] ?? json['is_read'] ?? false,
       senderUsername: json['senderUsername'] ?? json['sender_username'],
       senderProfilePic: json['senderProfilePic'] ?? json['sender_profile_pic'],
       senderFirstName: json['senderFirstName'] ?? json['sender_first_name'],
       senderLastName: json['senderLastName'] ?? json['sender_last_name'],
-      recipientUsername: json['recipientUsername'] ?? json['recipient_username'],
-      recipientProfilePic: json['recipientProfilePic'] ?? json['recipient_profile_pic'],
-      recipientFirstName: json['recipientFirstName'] ?? json['recipient_first_name'],
-      recipientLastName: json['recipientLastName'] ?? json['recipient_last_name'],
+      recipientUsername:
+          json['recipientUsername'] ?? json['recipient_username'],
+      recipientProfilePic:
+          json['recipientProfilePic'] ?? json['recipient_profile_pic'],
+      recipientFirstName:
+          json['recipientFirstName'] ?? json['recipient_first_name'],
+      recipientLastName:
+          json['recipientLastName'] ?? json['recipient_last_name'],
     );
   }
 
@@ -120,7 +120,11 @@ class MessageDto {
   String get timeString {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    final messageDate = DateTime(createdAt.year, createdAt.month, createdAt.day);
+    final messageDate = DateTime(
+      createdAt.year,
+      createdAt.month,
+      createdAt.day,
+    );
 
     if (messageDate == today) {
       return '${createdAt.hour.toString().padLeft(2, '0')}:${createdAt.minute.toString().padLeft(2, '0')}';

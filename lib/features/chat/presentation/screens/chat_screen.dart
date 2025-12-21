@@ -29,7 +29,9 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void initState() {
     super.initState();
-    debugPrint('[ChatScreen] initState: otherUserId=${widget.otherUserId}, otherUserName=${widget.otherUserName}');
+    debugPrint(
+      '[ChatScreen] initState: otherUserId=${widget.otherUserId}, otherUserName=${widget.otherUserName}',
+    );
 
     _chatProvider = ChatProvider();
 
@@ -144,7 +146,8 @@ class _ChatScreenState extends State<ChatScreen> {
                   controller: _scrollController,
                   reverse: true,
                   padding: const EdgeInsets.symmetric(vertical: 16),
-                  itemCount: _chatProvider.currentMessages.length +
+                  itemCount:
+                      _chatProvider.currentMessages.length +
                       (_chatProvider.messagesLoading ? 1 : 0),
                   itemBuilder: (context, index) {
                     if (_chatProvider.messagesLoading &&
@@ -160,10 +163,7 @@ class _ChatScreenState extends State<ChatScreen> {
                     final message = _chatProvider.currentMessages[index];
                     final isSent = message.senderId == currentUserId;
 
-                    return MessageBubble(
-                      message: message,
-                      isSent: isSent,
-                    );
+                    return MessageBubble(message: message, isSent: isSent);
                   },
                 );
               },
@@ -199,17 +199,12 @@ class _ChatScreenState extends State<ChatScreen> {
             const SizedBox(height: 16),
             Text(
               widget.otherUserName,
-              style: const TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-              ),
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
             Text(
               'Start the conversation!',
-              style: TextStyle(
-                color: Colors.grey[600],
-              ),
+              style: TextStyle(color: Colors.grey[600]),
             ),
           ],
         ),
@@ -351,14 +346,17 @@ class _ChatScreenState extends State<ChatScreen> {
                   Navigator.pop(context);
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                        content: Text('View profile: ${widget.otherUserId}')),
+                      content: Text('View profile: ${widget.otherUserId}'),
+                    ),
                   );
                 },
               ),
               ListTile(
                 leading: const Icon(Icons.block, color: Colors.red),
-                title: const Text('Block User',
-                    style: TextStyle(color: Colors.red)),
+                title: const Text(
+                  'Block User',
+                  style: TextStyle(color: Colors.red),
+                ),
                 onTap: () {
                   Navigator.pop(context);
                   ScaffoldMessenger.of(context).showSnackBar(

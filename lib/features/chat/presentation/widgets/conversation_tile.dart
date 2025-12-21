@@ -7,11 +7,7 @@ class ConversationTile extends StatelessWidget {
   final ConversationDto conversation;
   final VoidCallback? onTap;
 
-  const ConversationTile({
-    super.key,
-    required this.conversation,
-    this.onTap,
-  });
+  const ConversationTile({super.key, required this.conversation, this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -24,10 +20,14 @@ class ConversationTile extends StatelessWidget {
             // Avatar
             Builder(
               builder: (context) {
-                final profilePicUrl = ProfilePicHelper.getProfilePicUrl(conversation.otherProfilePic);
+                final profilePicUrl = ProfilePicHelper.getProfilePicUrl(
+                  conversation.otherProfilePic,
+                );
                 return CircleAvatar(
                   radius: 28,
-                  backgroundColor: const Color(0xFF7ED321).withValues(alpha: 0.2),
+                  backgroundColor: const Color(
+                    0xFF7ED321,
+                  ).withValues(alpha: 0.2),
                   backgroundImage: profilePicUrl != null
                       ? NetworkImage(profilePicUrl)
                       : null,

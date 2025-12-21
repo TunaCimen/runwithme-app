@@ -6,11 +6,11 @@ import 'models/auth_dto.dart';
 class AuthApiClient {
   final Dio _dio;
 
-  AuthApiClient({
-    required String baseUrl,
-    Dio? dio,
-  }) : _dio = dio ??
-            Dio(BaseOptions(
+  AuthApiClient({required String baseUrl, Dio? dio})
+    : _dio =
+          dio ??
+          Dio(
+            BaseOptions(
               baseUrl: baseUrl,
               connectTimeout: const Duration(seconds: 10),
               receiveTimeout: const Duration(seconds: 20),
@@ -18,7 +18,8 @@ class AuthApiClient {
                 'Accept': 'application/json',
                 'Content-Type': 'application/json',
               },
-            ));
+            ),
+          );
 
   /// Register a new user
   /// Returns RegisterResponseDto indicating email verification is required
@@ -31,12 +32,16 @@ class AuthApiClient {
   }
 
   /// Resend verification email
-  Future<EmailVerificationResponseDto> resendVerificationEmail(String email) async {
+  Future<EmailVerificationResponseDto> resendVerificationEmail(
+    String email,
+  ) async {
     final response = await _dio.post(
       '/api/v1/auth/resend-verification',
       data: {'email': email},
     );
-    return EmailVerificationResponseDto.fromJson(_decodeResponse(response.data));
+    return EmailVerificationResponseDto.fromJson(
+      _decodeResponse(response.data),
+    );
   }
 
   /// Get user email by username (for resend verification flow)
@@ -72,9 +77,7 @@ class AuthApiClient {
   Future<void> logout(String accessToken) async {
     await _dio.post(
       '/api/v1/auth/logout',
-      options: Options(
-        headers: {'Authorization': 'Bearer $accessToken'},
-      ),
+      options: Options(headers: {'Authorization': 'Bearer $accessToken'}),
     );
   }
 

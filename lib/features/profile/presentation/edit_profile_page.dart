@@ -8,10 +8,7 @@ import '../../auth/data/auth_service.dart';
 class EditProfilePage extends StatefulWidget {
   final UserProfile? existingProfile;
 
-  const EditProfilePage({
-    super.key,
-    this.existingProfile,
-  });
+  const EditProfilePage({super.key, this.existingProfile});
 
   @override
   State<EditProfilePage> createState() => _EditProfilePageState();
@@ -47,16 +44,24 @@ class _EditProfilePageState extends State<EditProfilePage> {
   @override
   void initState() {
     super.initState();
-    _firstNameController = TextEditingController(text: widget.existingProfile?.firstName ?? '');
-    _lastNameController = TextEditingController(text: widget.existingProfile?.lastName ?? '');
-    _pronounsController = TextEditingController(text: widget.existingProfile?.pronouns ?? '');
+    _firstNameController = TextEditingController(
+      text: widget.existingProfile?.firstName ?? '',
+    );
+    _lastNameController = TextEditingController(
+      text: widget.existingProfile?.lastName ?? '',
+    );
+    _pronounsController = TextEditingController(
+      text: widget.existingProfile?.pronouns ?? '',
+    );
     _birthday = widget.existingProfile?.birthday;
     _expertLevel = widget.existingProfile?.expertLevel ?? 'Beginner';
     _profileVisibility = widget.existingProfile?.profileVisibility ?? true;
 
     // Load existing profile picture URL
     if (widget.existingProfile?.profilePic != null) {
-      _profilePicUrl = _getFullProfilePicUrl(widget.existingProfile!.profilePic!);
+      _profilePicUrl = _getFullProfilePicUrl(
+        widget.existingProfile!.profilePic!,
+      );
     }
   }
 
@@ -210,9 +215,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
-            colorScheme: const ColorScheme.light(
-              primary: Color(0xFF7ED321),
-            ),
+            colorScheme: const ColorScheme.light(primary: Color(0xFF7ED321)),
           ),
           child: child!,
         );
@@ -259,7 +262,9 @@ class _EditProfilePageState extends State<EditProfilePage> {
       userId: user.userId,
       firstName: _firstNameController.text.trim(),
       lastName: _lastNameController.text.trim(),
-      pronouns: _pronounsController.text.trim().isEmpty ? null : _pronounsController.text.trim(),
+      pronouns: _pronounsController.text.trim().isEmpty
+          ? null
+          : _pronounsController.text.trim(),
       birthday: _birthday,
       expertLevel: _expertLevel,
       profileVisibility: _profileVisibility,
@@ -267,8 +272,14 @@ class _EditProfilePageState extends State<EditProfilePage> {
     );
 
     final result = widget.existingProfile == null
-        ? await _profileRepository.createProfile(profile, accessToken: accessToken)
-        : await _profileRepository.updateProfile(profile, accessToken: accessToken);
+        ? await _profileRepository.createProfile(
+            profile,
+            accessToken: accessToken,
+          )
+        : await _profileRepository.updateProfile(
+            profile,
+            accessToken: accessToken,
+          );
 
     if (!mounted) return;
     setState(() => _isLoading = false);
@@ -288,10 +299,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
 
   void _showErrorSnackBar(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.red,
-      ),
+      SnackBar(content: Text(message), backgroundColor: Colors.red),
     );
   }
 
@@ -299,7 +307,9 @@ class _EditProfilePageState extends State<EditProfilePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.existingProfile == null ? 'Create Profile' : 'Edit Profile'),
+        title: Text(
+          widget.existingProfile == null ? 'Create Profile' : 'Edit Profile',
+        ),
         backgroundColor: const Color(0xFF7ED321),
         foregroundColor: Colors.white,
       ),
@@ -329,16 +339,19 @@ class _EditProfilePageState extends State<EditProfilePage> {
                                     fit: BoxFit.cover,
                                   )
                                 : _profilePicUrl != null
-                                    ? DecorationImage(
-                                        image: NetworkImage(_profilePicUrl!),
-                                        fit: BoxFit.cover,
-                                        onError: (exception, stackTrace) {
-                                          debugPrint('[EditProfilePage] Error loading profile pic: $exception');
-                                        },
-                                      )
-                                    : null,
+                                ? DecorationImage(
+                                    image: NetworkImage(_profilePicUrl!),
+                                    fit: BoxFit.cover,
+                                    onError: (exception, stackTrace) {
+                                      debugPrint(
+                                        '[EditProfilePage] Error loading profile pic: $exception',
+                                      );
+                                    },
+                                  )
+                                : null,
                           ),
-                          child: (_selectedImage == null && _profilePicUrl == null)
+                          child:
+                              (_selectedImage == null && _profilePicUrl == null)
                               ? Icon(
                                   Icons.person,
                                   size: 60,
@@ -389,10 +402,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
                 Center(
                   child: Text(
                     'Tap to change photo',
-                    style: TextStyle(
-                      color: Colors.grey[600],
-                      fontSize: 12,
-                    ),
+                    style: TextStyle(color: Colors.grey[600], fontSize: 12),
                   ),
                 ),
                 const SizedBox(height: 32),
@@ -469,7 +479,9 @@ class _EditProfilePageState extends State<EditProfilePage> {
                           ? 'Select your birthday'
                           : '${_birthday!.day}/${_birthday!.month}/${_birthday!.year}',
                       style: TextStyle(
-                        color: _birthday == null ? Colors.grey[600] : Colors.black87,
+                        color: _birthday == null
+                            ? Colors.grey[600]
+                            : Colors.black87,
                       ),
                     ),
                   ),
@@ -487,10 +499,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
                     prefixIcon: const Icon(Icons.directions_run),
                   ),
                   items: _expertLevels.map((level) {
-                    return DropdownMenuItem(
-                      value: level,
-                      child: Text(level),
-                    );
+                    return DropdownMenuItem(value: level, child: Text(level));
                   }).toList(),
                   onChanged: (value) {
                     setState(() {
@@ -512,7 +521,15 @@ class _EditProfilePageState extends State<EditProfilePage> {
                     title: const Text('Public Profile'),
                     subtitle: const Text('Allow others to see your profile'),
                     value: _profileVisibility,
-                    activeColor: const Color(0xFF7ED321),
+                    activeTrackColor: const Color(
+                      0xFF7ED321,
+                    ).withValues(alpha: 0.5),
+                    thumbColor: WidgetStateProperty.resolveWith((states) {
+                      if (states.contains(WidgetState.selected)) {
+                        return const Color(0xFF7ED321);
+                      }
+                      return null;
+                    }),
                     onChanged: (value) {
                       setState(() {
                         _profileVisibility = value;

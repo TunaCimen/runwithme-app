@@ -4,18 +4,21 @@ import 'package:latlong2/latlong.dart';
 import '../../../core/models/route.dart' as route_model;
 import '../../auth/data/auth_service.dart';
 import '../../map/data/route_repository.dart';
-import 'edit_route_page.dart';
+import '../../map/presentation/route_navigation_page.dart';
+import '../../run/data/run_repository.dart';
 
 typedef RunRoute = route_model.Route;
 
 class SavedRoutesTab extends StatefulWidget {
   final AuthService authService;
   final RouteRepository routeRepository;
+  final RunRepository runRepository;
 
   const SavedRoutesTab({
     super.key,
     required this.authService,
     required this.routeRepository,
+    required this.runRepository,
   });
 
   @override
@@ -51,7 +54,6 @@ class _SavedRoutesTabState extends State<SavedRoutesTab> {
     });
 
     try {
-      // Get the user's liked routes using the repository method
       final routes = await widget.routeRepository.getUserLikedRoutes(
         userId: user.userId,
         page: 0,
@@ -75,21 +77,153 @@ class _SavedRoutesTabState extends State<SavedRoutesTab> {
     }
   }
 
-  Future<void> _editRoute(RunRoute route) async {
-    final updatedRoute = await Navigator.push<RunRoute>(
+  Future<void> _toggleVisibility(RunRoute route) async {
+    final accessToken = widget.authService.accessToken;
+    debugPrint('[SavedRoutesTab] Toggling visibility for route ${route.id}');
+    debugPrint(
+      '[SavedRoutesTab] Current visibility: ${route.isPublic ? 'public' : 'private'}',
+    );
+
+    if (accessToken == null) {
+      debugPrint('[SavedRoutesTab] ERROR: No access token');
+      return;
+    }
+
+    final newVisibility = !route.isPublic;
+    debugPrint(
+      '[SavedRoutesTab] New visibility will be: ${newVisibility ? 'public' : 'private'}',
+    );
+
+    // Optimistic update
+    final index = _savedRoutes.indexWhere((r) => r.id == route.id);
+    if (index == -1) {
+      debugPrint('[SavedRoutesTab] ERROR: Route not found in list');
+      return;
+    }
+
+    setState(() {
+      _savedRoutes[index] = route.copyWith(isPublic: newVisibility);
+    });
+
+    debugPrint(
+      '[SavedRoutesTab] Calling updateRouteFields with routeId=${route.id}, isPublic=$newVisibility',
+    );
+    final result = await widget.routeRepository.updateRouteFields(
+      routeId: route.id,
+      isPublic: newVisibility,
+      accessToken: accessToken,
+    );
+
+    debugPrint(
+      '[SavedRoutesTab] Result: success=${result.success}, message=${result.message}',
+    );
+
+    if (!result.success) {
+      // Revert on failure
+      debugPrint('[SavedRoutesTab] FAILED: Reverting to original visibility');
+      if (mounted) {
+        setState(() {
+          _savedRoutes[index] = route;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(result.message ?? 'Failed to update visibility'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } else {
+      debugPrint('[SavedRoutesTab] SUCCESS: Visibility updated');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Route is now ${newVisibility ? 'public' : 'private'}',
+            ),
+            backgroundColor: const Color(0xFF7ED321),
+          ),
+        );
+      }
+    }
+  }
+
+  /// Navigate to route navigation page
+  Future<void> _navigateRoute(RunRoute route) async {
+    final result = await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => EditRoutePage(
-          route: route,
-          authService: widget.authService,
-          routeRepository: widget.routeRepository,
-        ),
+        builder: (context) => RouteNavigationPage(route: route),
       ),
     );
 
-    if (updatedRoute != null) {
-      // Refresh the list
-      await _loadSavedRoutes();
+    // If a run session was completed, show a success message
+    if (result != null && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Run completed and saved!'),
+          backgroundColor: Color(0xFF7ED321),
+        ),
+      );
+    }
+  }
+
+  Future<void> _convertRouteToRun(RunRoute route) async {
+    final accessToken = widget.authService.accessToken;
+    if (accessToken == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Please log in to save route as run'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      return;
+    }
+
+    // Show loading indicator
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(child: CircularProgressIndicator()),
+    );
+
+    try {
+      final result = await widget.runRepository.createRunFromRoute(
+        routeId: route.id,
+        accessToken: accessToken,
+      );
+
+      // Close loading dialog
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+
+      if (mounted) {
+        if (result.success) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(result.message ?? 'Route saved as run!'),
+              backgroundColor: const Color(0xFF7ED321),
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(result.message ?? 'Failed to save route as run'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      // Close loading dialog
+      if (mounted) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        );
+      }
     }
   }
 
@@ -160,11 +294,7 @@ class _SavedRoutesTabState extends State<SavedRoutesTab> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.favorite_border,
-              size: 80,
-              color: Colors.grey[300],
-            ),
+            Icon(Icons.favorite_border, size: 80, color: Colors.grey[300]),
             const SizedBox(height: 24),
             const Text(
               'No Saved Routes',
@@ -177,24 +307,26 @@ class _SavedRoutesTabState extends State<SavedRoutesTab> {
             const SizedBox(height: 12),
             Text(
               'Routes you like will appear here',
-              style: TextStyle(
-                fontSize: 16,
-                color: Colors.grey[600],
-              ),
+              style: TextStyle(fontSize: 16, color: Colors.grey[600]),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 24),
             ElevatedButton.icon(
               onPressed: () {
                 // Navigate to map page
-                DefaultTabController.of(context).animateTo(1); // Switch to map tab
+                DefaultTabController.of(
+                  context,
+                ).animateTo(1); // Switch to map tab
               },
               icon: const Icon(Icons.explore),
               label: const Text('Explore Routes'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF7ED321),
                 foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
@@ -239,7 +371,8 @@ class _SavedRoutesTabState extends State<SavedRoutesTab> {
                 ),
                 children: [
                   TileLayer(
-                    urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                    urlTemplate:
+                        'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                     userAgentPackageName: 'com.example.runwithme_app',
                   ),
                   PolylineLayer(
@@ -247,9 +380,14 @@ class _SavedRoutesTabState extends State<SavedRoutesTab> {
                       Polyline(
                         // Use route points if available, otherwise draw line from start to end
                         points: route.points.isNotEmpty
-                            ? route.points.map((p) => LatLng(p.latitude, p.longitude)).toList()
+                            ? route.points
+                                  .map((p) => LatLng(p.latitude, p.longitude))
+                                  .toList()
                             : [
-                                LatLng(route.startPointLat, route.startPointLon),
+                                LatLng(
+                                  route.startPointLat,
+                                  route.startPointLon,
+                                ),
                                 LatLng(route.endPointLat, route.endPointLon),
                               ],
                         strokeWidth: 4.0,
@@ -269,7 +407,11 @@ class _SavedRoutesTabState extends State<SavedRoutesTab> {
                             color: Colors.green,
                             shape: BoxShape.circle,
                           ),
-                          child: const Icon(Icons.play_arrow, color: Colors.white, size: 16),
+                          child: const Icon(
+                            Icons.play_arrow,
+                            color: Colors.white,
+                            size: 16,
+                          ),
                         ),
                       ),
                       // End marker
@@ -282,7 +424,11 @@ class _SavedRoutesTabState extends State<SavedRoutesTab> {
                             color: Colors.red,
                             shape: BoxShape.circle,
                           ),
-                          child: const Icon(Icons.stop, color: Colors.white, size: 16),
+                          child: const Icon(
+                            Icons.stop,
+                            color: Colors.white,
+                            size: 16,
+                          ),
                         ),
                       ),
                     ],
@@ -328,7 +474,10 @@ class _SavedRoutesTabState extends State<SavedRoutesTab> {
                     ),
                     if (route.difficulty != null)
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
                         decoration: BoxDecoration(
                           color: _getDifficultyColor(route.difficulty!),
                           borderRadius: BorderRadius.circular(12),
@@ -360,11 +509,7 @@ class _SavedRoutesTabState extends State<SavedRoutesTab> {
                       value: route.formattedDuration,
                       label: 'Duration',
                     ),
-                    _buildStatItem(
-                      icon: Icons.visibility,
-                      value: route.isPublic ? 'Public' : 'Private',
-                      label: 'Visibility',
-                    ),
+                    _buildVisibilityButton(route),
                   ],
                 ),
                 const SizedBox(height: 16),
@@ -374,9 +519,9 @@ class _SavedRoutesTabState extends State<SavedRoutesTab> {
                   children: [
                     Expanded(
                       child: OutlinedButton.icon(
-                        onPressed: () => _editRoute(route),
-                        icon: const Icon(Icons.edit),
-                        label: const Text('Edit'),
+                        onPressed: () => _convertRouteToRun(route),
+                        icon: const Icon(Icons.add_circle_outline),
+                        label: const Text('Save as Run'),
                         style: OutlinedButton.styleFrom(
                           foregroundColor: const Color(0xFF7ED321),
                           side: const BorderSide(color: Color(0xFF7ED321)),
@@ -390,12 +535,7 @@ class _SavedRoutesTabState extends State<SavedRoutesTab> {
                     const SizedBox(width: 12),
                     Expanded(
                       child: ElevatedButton.icon(
-                        onPressed: () {
-                          // TODO: Navigate to route details or start navigation
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Navigation coming soon!')),
-                          );
-                        },
+                        onPressed: () => _navigateRoute(route),
                         icon: const Icon(Icons.directions),
                         label: const Text('Navigate'),
                         style: ElevatedButton.styleFrom(
@@ -429,20 +569,57 @@ class _SavedRoutesTabState extends State<SavedRoutesTab> {
         const SizedBox(height: 4),
         Text(
           value,
-          style: const TextStyle(
-            fontSize: 15,
-            fontWeight: FontWeight.w600,
-          ),
+          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
         ),
         const SizedBox(height: 2),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            color: Colors.grey[600],
+        Text(label, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+      ],
+    );
+  }
+
+  Widget _buildVisibilityButton(RunRoute route) {
+    final isPublic = route.isPublic;
+    return GestureDetector(
+      onTap: () => _toggleVisibility(route),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: isPublic
+              ? const Color(0xFF7ED321).withValues(alpha: 0.1)
+              : Colors.grey.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isPublic
+                ? const Color(0xFF7ED321).withValues(alpha: 0.3)
+                : Colors.grey.withValues(alpha: 0.3),
           ),
         ),
-      ],
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              isPublic ? Icons.public : Icons.lock,
+              size: 16,
+              color: isPublic ? const Color(0xFF7ED321) : Colors.grey[600],
+            ),
+            const SizedBox(width: 4),
+            Text(
+              isPublic ? 'Public' : 'Private',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: isPublic ? const Color(0xFF7ED321) : Colors.grey[600],
+              ),
+            ),
+            const SizedBox(width: 4),
+            Icon(
+              Icons.swap_horiz,
+              size: 14,
+              color: isPublic ? const Color(0xFF7ED321) : Colors.grey[600],
+            ),
+          ],
+        ),
+      ),
     );
   }
 

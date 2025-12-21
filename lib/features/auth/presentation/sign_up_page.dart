@@ -129,16 +129,16 @@ class _SignUpPageState extends State<SignUpPage> {
                   Text(
                     'Create Account',
                     style: Theme.of(context).textTheme.headlineLarge?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
+                      fontWeight: FontWeight.bold,
+                    ),
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 8),
                   Text(
                     'Join the running community',
-                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                          color: Colors.grey[600],
-                        ),
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodyLarge?.copyWith(color: Colors.grey[600]),
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 32),
@@ -218,8 +218,9 @@ class _SignUpPageState extends State<SignUpPage> {
                       if (value == null || value.isEmpty) {
                         return 'Please enter your email';
                       }
-                      if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$')
-                          .hasMatch(value)) {
+                      if (!RegExp(
+                        r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$',
+                      ).hasMatch(value)) {
                         return 'Please enter a valid email';
                       }
                       return null;
@@ -282,7 +283,9 @@ class _SignUpPageState extends State<SignUpPage> {
                         ),
                         onPressed: () {
                           setState(
-                              () => _obscureConfirmPassword = !_obscureConfirmPassword);
+                            () => _obscureConfirmPassword =
+                                !_obscureConfirmPassword,
+                          );
                         },
                       ),
                       border: OutlineInputBorder(
@@ -323,7 +326,10 @@ class _SignUpPageState extends State<SignUpPage> {
                           )
                         : const Text(
                             'Create Account',
-                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                   ),
                   const SizedBox(height: 24),
@@ -331,10 +337,7 @@ class _SignUpPageState extends State<SignUpPage> {
                   // Terms and Privacy
                   Text(
                     'By creating an account, you agree to our Terms of Service and Privacy Policy',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey[600],
-                    ),
+                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                     textAlign: TextAlign.center,
                   ),
                 ],

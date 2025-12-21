@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import '../../../core/models/models.dart';
 import 'route_api_client.dart';
 import 'models/route_dto.dart';
@@ -51,7 +52,10 @@ class RouteRepository {
     String baseUrl = 'http://35.158.35.102:8080',
     RouteApiClient? apiClient,
   }) {
-    _instance ??= RouteRepository._internal(baseUrl: baseUrl, apiClient: apiClient);
+    _instance ??= RouteRepository._internal(
+      baseUrl: baseUrl,
+      apiClient: apiClient,
+    );
     return _instance!;
   }
 
@@ -79,7 +83,6 @@ class RouteRepository {
     _likeStatusCache.clear();
     _likeCountCache.clear();
     _cacheTimestamps.clear();
-    print('[RouteRepository] Cache cleared');
   }
 
   /// Clear only route list caches (keeps individual routes)
@@ -88,9 +91,9 @@ class RouteRepository {
     _publicRoutesTotalCount = null;
     _nearbyRoutesCache.clear();
     _nearbyRoutesTotalCount.clear();
-    _cacheTimestamps.removeWhere((key, _) =>
-      key == 'publicRoutes' || key.startsWith('nearby_'));
-    print('[RouteRepository] List caches cleared');
+    _cacheTimestamps.removeWhere(
+      (key, _) => key == 'publicRoutes' || key.startsWith('nearby_'),
+    );
   }
 
   // ==================== Routes ====================
@@ -107,13 +110,13 @@ class RouteRepository {
     bool forceRefresh = false,
   }) async {
     // Cache key based on location and radius (round lat/lon to reduce cache misses)
-    final cacheKey = 'nearby_${lat.toStringAsFixed(3)}_${lon.toStringAsFixed(3)}_$radius';
+    final cacheKey =
+        'nearby_${lat.toStringAsFixed(3)}_${lon.toStringAsFixed(3)}_$radius';
 
     // Return cached data if valid and not forcing refresh
     if (!forceRefresh && page == 0 && _isCacheValid(cacheKey)) {
       final cachedRoutes = _nearbyRoutesCache[cacheKey];
       if (cachedRoutes != null) {
-        print('[RouteRepository] Returning cached nearby routes (${cachedRoutes.length} routes)');
         return RouteResult.success(
           routes: cachedRoutes,
           totalCount: _nearbyRoutesTotalCount[cacheKey],
@@ -150,13 +153,9 @@ class RouteRepository {
         totalCount: response.totalElements,
       );
     } on DioException catch (e) {
-      return RouteResult.failure(
-        message: _handleDioError(e),
-      );
+      return RouteResult.failure(message: _handleDioError(e));
     } catch (e) {
-      return RouteResult.failure(
-        message: 'An unexpected error occurred: $e',
-      );
+      return RouteResult.failure(message: 'An unexpected error occurred: $e');
     }
   }
 
@@ -174,7 +173,6 @@ class RouteRepository {
     if (!forceRefresh && page == 0 && _isCacheValid(cacheKey)) {
       final cachedRoutes = _publicRoutesCache;
       if (cachedRoutes != null) {
-        print('[RouteRepository] Returning cached public routes (${cachedRoutes.length} routes)');
         return RouteResult.success(
           routes: cachedRoutes,
           totalCount: _publicRoutesTotalCount,
@@ -208,13 +206,9 @@ class RouteRepository {
         totalCount: response.totalElements,
       );
     } on DioException catch (e) {
-      return RouteResult.failure(
-        message: _handleDioError(e),
-      );
+      return RouteResult.failure(message: _handleDioError(e));
     } catch (e) {
-      return RouteResult.failure(
-        message: 'An unexpected error occurred: $e',
-      );
+      return RouteResult.failure(message: 'An unexpected error occurred: $e');
     }
   }
 
@@ -231,14 +225,37 @@ class RouteRepository {
     if (!forceRefresh && _isCacheValid(cacheKey)) {
       final cachedRoute = _routeCache[routeId];
       if (cachedRoute != null) {
-        print('[RouteRepository] Returning cached route $routeId');
         return SingleRouteResult.success(route: cachedRoute);
       }
     }
 
     try {
-      final dto = await _apiClient.getRouteById(routeId, accessToken: accessToken);
+      debugPrint('[RouteRepository] Fetching route $routeId from API...');
+      final dto = await _apiClient.getRouteById(
+        routeId,
+        accessToken: accessToken,
+      );
+      debugPrint('[RouteRepository] Route DTO received for $routeId:');
+      debugPrint('[RouteRepository]   title: ${dto.title}');
+      debugPrint(
+        '[RouteRepository]   points count: ${dto.points?.length ?? 0}',
+      );
+      debugPrint(
+        '[RouteRepository]   startPoint: (${dto.startPointLat}, ${dto.startPointLon})',
+      );
+      debugPrint(
+        '[RouteRepository]   endPoint: (${dto.endPointLat}, ${dto.endPointLon})',
+      );
+      if (dto.points != null && dto.points!.isNotEmpty) {
+        debugPrint('[RouteRepository]   First DTO point: ${dto.points!.first}');
+        debugPrint('[RouteRepository]   Last DTO point: ${dto.points!.last}');
+      }
+
       final route = dto.toModel();
+      debugPrint('[RouteRepository] Route model created for $routeId:');
+      debugPrint(
+        '[RouteRepository]   model points count: ${route.points.length}',
+      );
 
       // Cache the route
       _routeCache[routeId] = route;
@@ -246,8 +263,12 @@ class RouteRepository {
 
       return SingleRouteResult.success(route: route);
     } on DioException catch (e) {
+      debugPrint(
+        '[RouteRepository] DioException fetching route $routeId: ${e.message}',
+      );
       return SingleRouteResult.failure(message: _handleDioError(e));
     } catch (e) {
+      debugPrint('[RouteRepository] Error fetching route $routeId: $e');
       return SingleRouteResult.failure(
         message: 'An unexpected error occurred: $e',
       );
@@ -271,18 +292,11 @@ class RouteRepository {
 
       final routes = dtos.map((dto) => dto.toModel()).toList();
 
-      return RouteResult.success(
-        routes: routes,
-        totalCount: routes.length,
-      );
+      return RouteResult.success(routes: routes, totalCount: routes.length);
     } on DioException catch (e) {
-      return RouteResult.failure(
-        message: _handleDioError(e),
-      );
+      return RouteResult.failure(message: _handleDioError(e));
     } catch (e) {
-      return RouteResult.failure(
-        message: 'An unexpected error occurred: $e',
-      );
+      return RouteResult.failure(message: 'An unexpected error occurred: $e');
     }
   }
 
@@ -396,10 +410,7 @@ class RouteRepository {
     required String accessToken,
   }) async {
     try {
-      await _apiClient.unlikeRoute(
-        routeId: routeId,
-        accessToken: accessToken,
-      );
+      await _apiClient.unlikeRoute(routeId: routeId, accessToken: accessToken);
 
       // Update cache
       _likeStatusCache[routeId] = false;
@@ -427,7 +438,9 @@ class RouteRepository {
     final cacheKey = 'like_$routeId';
 
     // Return cached data if valid and not forcing refresh
-    if (!forceRefresh && _isCacheValid(cacheKey) && _likeStatusCache.containsKey(routeId)) {
+    if (!forceRefresh &&
+        _isCacheValid(cacheKey) &&
+        _likeStatusCache.containsKey(routeId)) {
       return _likeStatusCache[routeId]!;
     }
 
@@ -457,7 +470,9 @@ class RouteRepository {
     final cacheKey = 'likeCount_$routeId';
 
     // Return cached data if valid and not forcing refresh
-    if (!forceRefresh && _isCacheValid(cacheKey) && _likeCountCache.containsKey(routeId)) {
+    if (!forceRefresh &&
+        _isCacheValid(cacheKey) &&
+        _likeCountCache.containsKey(routeId)) {
       return _likeCountCache[routeId]!;
     }
 
@@ -506,7 +521,8 @@ class RouteRepository {
   Future<List<Route>> fetchFullRouteDetails({
     required List<Route> routes,
     String? accessToken,
-    int batchSize = 10, // Limit concurrent requests to avoid overwhelming server
+    int batchSize =
+        10, // Limit concurrent requests to avoid overwhelming server
   }) async {
     if (routes.isEmpty) return [];
 
@@ -515,7 +531,9 @@ class RouteRepository {
 
     // Process routes in batches for controlled parallelism
     for (var i = 0; i < routes.length; i += batchSize) {
-      final batchEnd = (i + batchSize < routes.length) ? i + batchSize : routes.length;
+      final batchEnd = (i + batchSize < routes.length)
+          ? i + batchSize
+          : routes.length;
       final batch = routes.sublist(i, batchEnd);
 
       // Fetch batch in parallel
@@ -538,8 +556,6 @@ class RouteRepository {
     }
 
     stopwatch.stop();
-    print('[RouteRepository] fetchFullRouteDetails: ${routes.length} routes in ${stopwatch.elapsedMilliseconds}ms');
-
     return fullRoutes;
   }
 
@@ -551,6 +567,7 @@ class RouteRepository {
     required String accessToken,
   }) async {
     try {
+      debugPrint('[RouteRepository] getUserLikedRoutes for user: $userId');
       // Get the liked routes response (contains route IDs)
       final likedRoutesResponse = await _apiClient.getUserLikedRoutes(
         userId: userId,
@@ -559,25 +576,51 @@ class RouteRepository {
         accessToken: accessToken,
       );
 
+      debugPrint(
+        '[RouteRepository] Liked routes response: ${likedRoutesResponse.content.length} items',
+      );
+      for (var routeLike in likedRoutesResponse.content) {
+        debugPrint(
+          '[RouteRepository]   routeLike: routeId=${routeLike.routeId}',
+        );
+      }
+
       // Fetch the actual route details for each liked route
       final routes = <Route>[];
       for (var routeLike in likedRoutesResponse.content) {
-        if (routeLike.routeId == null) continue;
+        if (routeLike.routeId == null) {
+          debugPrint(
+            '[RouteRepository]   Skipping routeLike with null routeId',
+          );
+          continue;
+        }
 
         try {
+          debugPrint(
+            '[RouteRepository]   Fetching route ${routeLike.routeId}...',
+          );
           final routeDto = await _apiClient.getRouteById(
             routeLike.routeId!,
             accessToken: accessToken,
           );
-          routes.add(routeDto.toModel());
+          final route = routeDto.toModel();
+          debugPrint(
+            '[RouteRepository]   Route ${route.id}: ${route.title}, ${route.points.length} points',
+          );
+          routes.add(route);
         } catch (e) {
+          debugPrint(
+            '[RouteRepository]   Error fetching route ${routeLike.routeId}: $e',
+          );
           // Skip routes that fail to load
           continue;
         }
       }
 
+      debugPrint('[RouteRepository] Returning ${routes.length} routes');
       return routes;
     } catch (e) {
+      debugPrint('[RouteRepository] getUserLikedRoutes error: $e');
       return [];
     }
   }
@@ -592,9 +635,10 @@ class RouteRepository {
       // Try to extract error message from response
       String? serverMessage;
       if (data is Map) {
-        serverMessage = data['message'] as String? ??
-                        data['error'] as String? ??
-                        data['detail'] as String?;
+        serverMessage =
+            data['message'] as String? ??
+            data['error'] as String? ??
+            data['detail'] as String?;
       } else if (data is String && data.isNotEmpty) {
         serverMessage = data;
       }
@@ -642,22 +686,12 @@ class RouteResult {
     this.message,
   });
 
-  factory RouteResult.success({
-    required List<Route> routes,
-    int? totalCount,
-  }) {
-    return RouteResult._(
-      success: true,
-      routes: routes,
-      totalCount: totalCount,
-    );
+  factory RouteResult.success({required List<Route> routes, int? totalCount}) {
+    return RouteResult._(success: true, routes: routes, totalCount: totalCount);
   }
 
   factory RouteResult.failure({required String message}) {
-    return RouteResult._(
-      success: false,
-      message: message,
-    );
+    return RouteResult._(success: false, message: message);
   }
 }
 
@@ -667,24 +701,14 @@ class SingleRouteResult {
   final Route? route;
   final String? message;
 
-  SingleRouteResult._({
-    required this.success,
-    this.route,
-    this.message,
-  });
+  SingleRouteResult._({required this.success, this.route, this.message});
 
   factory SingleRouteResult.success({required Route route}) {
-    return SingleRouteResult._(
-      success: true,
-      route: route,
-    );
+    return SingleRouteResult._(success: true, route: route);
   }
 
   factory SingleRouteResult.failure({required String message}) {
-    return SingleRouteResult._(
-      success: false,
-      message: message,
-    );
+    return SingleRouteResult._(success: false, message: message);
   }
 }
 
@@ -694,23 +718,13 @@ class RouteLikeResult {
   final RouteLike? routeLike;
   final String? message;
 
-  RouteLikeResult._({
-    required this.success,
-    this.routeLike,
-    this.message,
-  });
+  RouteLikeResult._({required this.success, this.routeLike, this.message});
 
   factory RouteLikeResult.success({RouteLike? routeLike}) {
-    return RouteLikeResult._(
-      success: true,
-      routeLike: routeLike,
-    );
+    return RouteLikeResult._(success: true, routeLike: routeLike);
   }
 
   factory RouteLikeResult.failure({required String message}) {
-    return RouteLikeResult._(
-      success: false,
-      message: message,
-    );
+    return RouteLikeResult._(success: false, message: message);
   }
 }

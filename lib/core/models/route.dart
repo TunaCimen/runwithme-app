@@ -50,30 +50,38 @@ class Route {
       id: (json['id'] as num).toInt(),
       title: json['title'] as String?,
       description: json['description'] as String?,
-      distanceM: (json['distanceM'] as num?)?.toDouble() ??
-                 (json['distance_m'] as num).toDouble(),
-      estimatedDurationS: (json['estimatedDurationS'] as num?)?.toInt() ??
-                          (json['estimated_duration_s'] as num).toInt(),
+      distanceM:
+          (json['distanceM'] as num?)?.toDouble() ??
+          (json['distance_m'] as num).toDouble(),
+      estimatedDurationS:
+          (json['estimatedDurationS'] as num?)?.toInt() ??
+          (json['estimated_duration_s'] as num).toInt(),
       difficulty: json['difficulty'] as String?,
-      isPublic: (json['isPublic'] as bool?) ??
-                (json['is_public'] as bool?) ??
-                (json['public'] as bool?) ??
-                true,
-      startPointLat: (json['startPointLat'] as num?)?.toDouble() ??
-                     (json['start_point_lat'] as num).toDouble(),
-      startPointLon: (json['startPointLon'] as num?)?.toDouble() ??
-                     (json['start_point_lon'] as num).toDouble(),
-      endPointLat: (json['endPointLat'] as num?)?.toDouble() ??
-                   (json['end_point_lat'] as num).toDouble(),
-      endPointLon: (json['endPointLon'] as num?)?.toDouble() ??
-                   (json['end_point_lon'] as num).toDouble(),
+      isPublic:
+          (json['isPublic'] as bool?) ??
+          (json['is_public'] as bool?) ??
+          (json['public'] as bool?) ??
+          true,
+      startPointLat:
+          (json['startPointLat'] as num?)?.toDouble() ??
+          (json['start_point_lat'] as num).toDouble(),
+      startPointLon:
+          (json['startPointLon'] as num?)?.toDouble() ??
+          (json['start_point_lon'] as num).toDouble(),
+      endPointLat:
+          (json['endPointLat'] as num?)?.toDouble() ??
+          (json['end_point_lat'] as num).toDouble(),
+      endPointLon:
+          (json['endPointLon'] as num?)?.toDouble() ??
+          (json['end_point_lon'] as num).toDouble(),
       points: pointsList,
-      creatorId: json['creatorId'] as String? ??
-                 json['creator_id'] as String?,
-      createdAt: DateTime.parse(json['createdAt'] as String? ??
-                                json['created_at'] as String),
-      updatedAt: DateTime.parse(json['updatedAt'] as String? ??
-                                json['updated_at'] as String),
+      creatorId: json['creatorId'] as String? ?? json['creator_id'] as String?,
+      createdAt: DateTime.parse(
+        json['createdAt'] as String? ?? json['created_at'] as String,
+      ),
+      updatedAt: DateTime.parse(
+        json['updatedAt'] as String? ?? json['updated_at'] as String,
+      ),
     );
   }
 
@@ -117,6 +125,45 @@ class Route {
     return '${hours}h ${remainingMinutes}min';
   }
 
+  /// Check if any point has valid elevation data
+  bool get hasElevationData {
+    return points.any((point) => point.elevationM != null);
+  }
+
+  /// Calculate total elevation gain from route points
+  /// Only counts positive elevation changes (uphill)
+  /// Returns null if no elevation data is available
+  double? get elevationGainM {
+    if (points.length < 2) return null;
+    if (!hasElevationData) return null;
+
+    double gain = 0;
+    double? previousElevation;
+
+    for (var point in points) {
+      if (point.elevationM != null) {
+        if (previousElevation != null) {
+          final diff = point.elevationM! - previousElevation;
+          if (diff > 0) {
+            gain += diff;
+          }
+        }
+        previousElevation = point.elevationM;
+      }
+    }
+
+    return gain;
+  }
+
+  /// Get formatted elevation gain string
+  /// Returns "N/A" if no elevation data is available
+  String get formattedElevationGain {
+    final gain = elevationGainM;
+    if (gain == null) return 'N/A';
+    if (gain < 1) return '0 m';
+    return '${gain.toInt()} m';
+  }
+
   /// Create a copy with updated fields
   Route copyWith({
     int? id,
@@ -156,6 +203,6 @@ class Route {
 
   @override
   String toString() {
-    return 'Route(id: $id, title: $title, distance: ${formattedDistance}, duration: ${formattedDuration}, points: ${points.length})';
+    return 'Route(id: $id, title: $title, distance: $formattedDistance, duration: $formattedDuration, points: ${points.length})';
   }
 }

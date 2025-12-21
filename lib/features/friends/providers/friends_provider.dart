@@ -55,7 +55,8 @@ class FriendsProvider extends ChangeNotifier {
     FriendsRepository? repository,
     ProfileRepository? profileRepository,
   }) : _repository = repository ?? FriendsRepository(baseUrl: baseUrl),
-       _profileRepository = profileRepository ?? ProfileRepository(baseUrl: baseUrl);
+       _profileRepository =
+           profileRepository ?? ProfileRepository(baseUrl: baseUrl);
 
   // Getters
   List<FriendshipDto> get friends => _friends;
@@ -95,7 +96,9 @@ class FriendsProvider extends ChangeNotifier {
     _log('_fetchAndCacheProfile called for userId: $userId');
 
     if (_profileCache.containsKey(userId)) {
-      _log('  -> Found in cache: ${_profileCache[userId]?.firstName} ${_profileCache[userId]?.lastName}');
+      _log(
+        '  -> Found in cache: ${_profileCache[userId]?.firstName} ${_profileCache[userId]?.lastName}',
+      );
       return _profileCache[userId];
     }
 
@@ -106,10 +109,17 @@ class FriendsProvider extends ChangeNotifier {
 
     try {
       _log('  -> Fetching profile from API...');
-      final result = await _profileRepository.getProfile(userId, accessToken: _authToken!);
-      _log('  -> API result: success=${result.success}, profile=${result.profile}');
+      final result = await _profileRepository.getProfile(
+        userId,
+        accessToken: _authToken!,
+      );
+      _log(
+        '  -> API result: success=${result.success}, profile=${result.profile}',
+      );
       if (result.success && result.profile != null) {
-        _log('  -> Got profile: firstName=${result.profile!.firstName}, lastName=${result.profile!.lastName}');
+        _log(
+          '  -> Got profile: firstName=${result.profile!.firstName}, lastName=${result.profile!.lastName}',
+        );
         _profileCache[userId] = result.profile!;
         return result.profile;
       } else {
@@ -123,17 +133,21 @@ class FriendsProvider extends ChangeNotifier {
 
   /// Enrich friend requests with profile data
   Future<List<FriendRequestDto>> _enrichFriendRequests(
-    List<FriendRequestDto> requests,
-    {required bool isSent}
-  ) async {
-    _log('_enrichFriendRequests called: ${requests.length} requests, isSent=$isSent');
+    List<FriendRequestDto> requests, {
+    required bool isSent,
+  }) async {
+    _log(
+      '_enrichFriendRequests called: ${requests.length} requests, isSent=$isSent',
+    );
     final enrichedRequests = <FriendRequestDto>[];
 
     for (final request in requests) {
       // For sent requests, we need receiver info; for received, we need sender info
       final userId = isSent ? request.receiverId : request.senderId;
       _log('  Processing request ${request.requestId}: userId=$userId');
-      _log('    Before enrich - senderUsername: ${request.senderUsername}, receiverUsername: ${request.receiverUsername}');
+      _log(
+        '    Before enrich - senderUsername: ${request.senderUsername}, receiverUsername: ${request.receiverUsername}',
+      );
 
       final profile = await _fetchAndCacheProfile(userId);
 
@@ -146,7 +160,9 @@ class FriendsProvider extends ChangeNotifier {
             receiverLastName: profile.lastName,
             receiverProfilePic: profile.profilePic,
           );
-          _log('    After enrich - receiverDisplayName: ${enriched.receiverDisplayName}');
+          _log(
+            '    After enrich - receiverDisplayName: ${enriched.receiverDisplayName}',
+          );
           enrichedRequests.add(enriched);
         } else {
           final enriched = request.copyWith(
@@ -155,7 +171,9 @@ class FriendsProvider extends ChangeNotifier {
             senderLastName: profile.lastName,
             senderProfilePic: profile.profilePic,
           );
-          _log('    After enrich - senderDisplayName: ${enriched.senderDisplayName}');
+          _log(
+            '    After enrich - senderDisplayName: ${enriched.senderDisplayName}',
+          );
           enrichedRequests.add(enriched);
         }
       } else {
@@ -172,16 +190,21 @@ class FriendsProvider extends ChangeNotifier {
   UserProfile? getCachedProfile(String userId) => _profileCache[userId];
 
   /// Enrich friendships with profile data (profile pics)
-  Future<List<FriendshipDto>> _enrichFriendships(List<FriendshipDto> friendships) async {
+  Future<List<FriendshipDto>> _enrichFriendships(
+    List<FriendshipDto> friendships,
+  ) async {
     _log('_enrichFriendships called: ${friendships.length} friendships');
     final enrichedFriendships = <FriendshipDto>[];
 
     for (final friendship in friendships) {
       final userId = friendship.friendUserId;
-      _log('  Processing friendship: friendUserId=$userId, existing profilePic=${friendship.friendProfilePic}');
+      _log(
+        '  Processing friendship: friendUserId=$userId, existing profilePic=${friendship.friendProfilePic}',
+      );
 
       // Only fetch profile if we don't have profile pic
-      if (friendship.friendProfilePic == null || friendship.friendProfilePic!.isEmpty) {
+      if (friendship.friendProfilePic == null ||
+          friendship.friendProfilePic!.isEmpty) {
         final profile = await _fetchAndCacheProfile(userId);
 
         if (profile != null && profile.profilePic != null) {
@@ -208,7 +231,9 @@ class FriendsProvider extends ChangeNotifier {
 
   /// Load friends list (initial load or refresh)
   Future<void> loadFriends({bool refresh = false}) async {
-    _log('loadFriends called: refresh=$refresh, authToken=${_authToken != null ? "present" : "null"}, currentUserId=$_currentUserId');
+    _log(
+      'loadFriends called: refresh=$refresh, authToken=${_authToken != null ? "present" : "null"}, currentUserId=$_currentUserId',
+    );
 
     if (_friendsLoading) {
       _log('  -> Already loading, skipping');
@@ -225,7 +250,9 @@ class FriendsProvider extends ChangeNotifier {
     notifyListeners();
 
     final result = await _repository.getFriends(page: _friendsPage);
-    _log('  API result: success=${result.success}, content=${result.data?.content.length ?? 0} items');
+    _log(
+      '  API result: success=${result.success}, content=${result.data?.content.length ?? 0} items',
+    );
 
     if (result.success && result.data != null) {
       // The API returns friend info in a nested "user" object
@@ -233,7 +260,9 @@ class FriendsProvider extends ChangeNotifier {
 
       // Log friendship data
       for (final f in friendships) {
-        _log('    Friendship: friendUserId=${f.friendUserId}, friendUsername=${f.friendUsername}, profilePic=${f.friendProfilePic}');
+        _log(
+          '    Friendship: friendUserId=${f.friendUserId}, friendUsername=${f.friendUsername}, profilePic=${f.friendProfilePic}',
+        );
         final displayName = f.getFriendDisplayName(_currentUserId ?? '');
         _log('      -> displayName=$displayName');
       }
@@ -266,7 +295,9 @@ class FriendsProvider extends ChangeNotifier {
 
   /// Load sent requests (initial load or refresh)
   Future<void> loadSentRequests({bool refresh = false}) async {
-    _log('loadSentRequests called: refresh=$refresh, authToken=${_authToken != null ? "present" : "null"}');
+    _log(
+      'loadSentRequests called: refresh=$refresh, authToken=${_authToken != null ? "present" : "null"}',
+    );
 
     if (_sentRequestsLoading) {
       _log('  -> Already loading, skipping');
@@ -283,7 +314,9 @@ class FriendsProvider extends ChangeNotifier {
     notifyListeners();
 
     final result = await _repository.getSentRequests(page: _sentRequestsPage);
-    _log('  API result: success=${result.success}, content=${result.data?.content.length ?? 0} items');
+    _log(
+      '  API result: success=${result.success}, content=${result.data?.content.length ?? 0} items',
+    );
 
     if (result.success && result.data != null) {
       var pendingRequests = result.data!.content
@@ -293,15 +326,22 @@ class FriendsProvider extends ChangeNotifier {
 
       // Log raw request data
       for (final req in pendingRequests) {
-        _log('    Raw request: id=${req.requestId}, receiverId=${req.receiverId}, receiverUsername=${req.receiverUsername}');
+        _log(
+          '    Raw request: id=${req.requestId}, receiverId=${req.receiverId}, receiverUsername=${req.receiverUsername}',
+        );
       }
 
       // Enrich with receiver profile data
-      pendingRequests = await _enrichFriendRequests(pendingRequests, isSent: true);
+      pendingRequests = await _enrichFriendRequests(
+        pendingRequests,
+        isSent: true,
+      );
 
       // Log enriched request data
       for (final req in pendingRequests) {
-        _log('    Enriched request: id=${req.requestId}, receiverDisplayName=${req.receiverDisplayName}');
+        _log(
+          '    Enriched request: id=${req.requestId}, receiverDisplayName=${req.receiverDisplayName}',
+        );
       }
 
       if (refresh) {
@@ -328,7 +368,9 @@ class FriendsProvider extends ChangeNotifier {
 
   /// Load received requests (initial load or refresh)
   Future<void> loadReceivedRequests({bool refresh = false}) async {
-    _log('loadReceivedRequests called: refresh=$refresh, authToken=${_authToken != null ? "present" : "null"}');
+    _log(
+      'loadReceivedRequests called: refresh=$refresh, authToken=${_authToken != null ? "present" : "null"}',
+    );
 
     if (_receivedRequestsLoading) {
       _log('  -> Already loading, skipping');
@@ -344,8 +386,12 @@ class FriendsProvider extends ChangeNotifier {
     _receivedRequestsError = null;
     notifyListeners();
 
-    final result = await _repository.getReceivedRequests(page: _receivedRequestsPage);
-    _log('  API result: success=${result.success}, content=${result.data?.content.length ?? 0} items');
+    final result = await _repository.getReceivedRequests(
+      page: _receivedRequestsPage,
+    );
+    _log(
+      '  API result: success=${result.success}, content=${result.data?.content.length ?? 0} items',
+    );
 
     if (result.success && result.data != null) {
       var pendingRequests = result.data!.content
@@ -355,15 +401,22 @@ class FriendsProvider extends ChangeNotifier {
 
       // Log raw request data
       for (final req in pendingRequests) {
-        _log('    Raw request: id=${req.requestId}, senderId=${req.senderId}, senderUsername=${req.senderUsername}');
+        _log(
+          '    Raw request: id=${req.requestId}, senderId=${req.senderId}, senderUsername=${req.senderUsername}',
+        );
       }
 
       // Enrich with sender profile data
-      pendingRequests = await _enrichFriendRequests(pendingRequests, isSent: false);
+      pendingRequests = await _enrichFriendRequests(
+        pendingRequests,
+        isSent: false,
+      );
 
       // Log enriched request data
       for (final req in pendingRequests) {
-        _log('    Enriched request: id=${req.requestId}, senderDisplayName=${req.senderDisplayName}');
+        _log(
+          '    Enriched request: id=${req.requestId}, senderDisplayName=${req.senderDisplayName}',
+        );
       }
 
       if (refresh) {
@@ -412,7 +465,9 @@ class FriendsProvider extends ChangeNotifier {
 
     if (result.success && result.data != null) {
       // Enrich the new request with receiver profile data
-      final enriched = await _enrichFriendRequests([result.data!], isSent: true);
+      final enriched = await _enrichFriendRequests([
+        result.data!,
+      ], isSent: true);
       _sentRequests = [...enriched, ..._sentRequests];
     }
 
@@ -423,7 +478,9 @@ class FriendsProvider extends ChangeNotifier {
   }
 
   /// Accept a friend request
-  Future<FriendsResult<FriendRequestDto>> acceptRequest(String requestId) async {
+  Future<FriendsResult<FriendRequestDto>> acceptRequest(
+    String requestId,
+  ) async {
     _log('acceptRequest called: requestId=$requestId');
     _respondingToRequest = true;
     notifyListeners();
@@ -450,7 +507,9 @@ class FriendsProvider extends ChangeNotifier {
   }
 
   /// Reject a friend request
-  Future<FriendsResult<FriendRequestDto>> rejectRequest(String requestId) async {
+  Future<FriendsResult<FriendRequestDto>> rejectRequest(
+    String requestId,
+  ) async {
     _respondingToRequest = true;
     notifyListeners();
 

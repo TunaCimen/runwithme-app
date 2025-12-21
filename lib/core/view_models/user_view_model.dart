@@ -8,11 +8,7 @@ class UserViewModel {
   final UserProfile? profile;
   final Location? location;
 
-  const UserViewModel({
-    required this.user,
-    this.profile,
-    this.location,
-  });
+  const UserViewModel({required this.user, this.profile, this.location});
 
   String get userId => user.userId;
   String get username => user.username;

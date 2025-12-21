@@ -66,17 +66,13 @@ class AuthService {
   // Mock Google sign in (to be implemented later)
   Future<AuthResult> signInWithGoogle() async {
     await Future.delayed(const Duration(seconds: 1));
-    return AuthResult.failure(
-      message: 'Google sign in not yet implemented',
-    );
+    return AuthResult.failure(message: 'Google sign in not yet implemented');
   }
 
   // Mock Apple sign in (to be implemented later)
   Future<AuthResult> signInWithApple() async {
     await Future.delayed(const Duration(seconds: 1));
-    return AuthResult.failure(
-      message: 'Apple sign in not yet implemented',
-    );
+    return AuthResult.failure(message: 'Apple sign in not yet implemented');
   }
 
   // Check if user is logged in

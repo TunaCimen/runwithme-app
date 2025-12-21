@@ -78,10 +78,7 @@ class AuthRepository {
     required String password,
   }) async {
     try {
-      final request = LoginRequestDto(
-        username: username,
-        password: password,
-      );
+      final request = LoginRequestDto(username: username, password: password);
 
       final response = await _apiClient.login(request);
 
@@ -118,10 +115,9 @@ class AuthRepository {
     } else if (e.response?.statusCode == 401) {
       if (responseData is Map && responseData['message'] != null) {
         var msg = responseData['message'].toString().toLowerCase();
-        if (msg.contains('email') && (msg.contains('verify') || msg.contains('verified'))) {
-          return AuthResult.emailNotVerified(
-            message: responseData['message'],
-          );
+        if (msg.contains('email') &&
+            (msg.contains('verify') || msg.contains('verified'))) {
+          return AuthResult.emailNotVerified(message: responseData['message']);
         }
       }
       errorMessage = 'Invalid username or password';
@@ -130,9 +126,13 @@ class AuthRepository {
       if (responseData is Map) {
         if (responseData['emailVerified'] == false ||
             (responseData['message'] != null &&
-                responseData['message'].toString().toLowerCase().contains('verif'))) {
+                responseData['message'].toString().toLowerCase().contains(
+                  'verif',
+                ))) {
           return AuthResult.emailNotVerified(
-            message: responseData['message'] ?? 'Email not verified. Please check your inbox.',
+            message:
+                responseData['message'] ??
+                'Email not verified. Please check your inbox.',
             email: responseData['email'] as String?,
           );
         }
@@ -196,13 +196,8 @@ class AuthResult {
     );
   }
 
-  factory AuthResult.failure({
-    required String message,
-  }) {
-    return AuthResult._(
-      success: false,
-      message: message,
-    );
+  factory AuthResult.failure({required String message}) {
+    return AuthResult._(success: false, message: message);
   }
 
   /// Registration successful, email verification required

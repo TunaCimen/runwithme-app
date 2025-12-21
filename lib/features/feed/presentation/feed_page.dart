@@ -4,6 +4,7 @@ import '../../auth/data/auth_service.dart';
 import '../providers/feed_provider.dart';
 import '../data/models/feed_post_dto.dart';
 import '../../chat/presentation/screens/conversations_screen.dart';
+import '../../profile/presentation/user_profile_page.dart';
 import 'screens/create_post_screen.dart';
 import 'screens/post_detail_screen.dart';
 import 'widgets/feed_post_card.dart';
@@ -15,7 +16,8 @@ class FeedPage extends StatefulWidget {
   State<FeedPage> createState() => _FeedPageState();
 }
 
-class _FeedPageState extends State<FeedPage> with SingleTickerProviderStateMixin {
+class _FeedPageState extends State<FeedPage>
+    with SingleTickerProviderStateMixin {
   late TabController _tabController;
   late FeedProvider _feedProvider;
   final _authService = AuthService();
@@ -67,7 +69,9 @@ class _FeedPageState extends State<FeedPage> with SingleTickerProviderStateMixin
             icon: const Icon(Icons.send_outlined, color: Colors.black87),
             onPressed: () => Navigator.push(
               context,
-              MaterialPageRoute(builder: (context) => const ConversationsScreen()),
+              MaterialPageRoute(
+                builder: (context) => const ConversationsScreen(),
+              ),
             ),
           ),
         ],
@@ -141,10 +145,7 @@ class _FeedPageState extends State<FeedPage> with SingleTickerProviderStateMixin
           Expanded(
             child: TabBarView(
               controller: _tabController,
-              children: [
-                _buildPostsTab(),
-                _buildMatchesTab(),
-              ],
+              children: [_buildPostsTab(), _buildMatchesTab()],
             ),
           ),
         ],
@@ -156,11 +157,16 @@ class _FeedPageState extends State<FeedPage> with SingleTickerProviderStateMixin
     return ListenableBuilder(
       listenable: _feedProvider,
       builder: (context, _) {
-        if (_feedProvider.feedLoading && _feedProvider.feedPosts.isEmpty) {
-          return const Center(child: CircularProgressIndicator());
+        // Show loading indicator during initial load or refresh when no posts exist
+        if ((_feedProvider.feedLoading || _feedProvider.feedRefreshing) &&
+            _feedProvider.feedPosts.isEmpty) {
+          return const Center(
+            child: CircularProgressIndicator(color: Color(0xFF7ED321)),
+          );
         }
 
-        if (_feedProvider.feedError != null && _feedProvider.feedPosts.isEmpty) {
+        if (_feedProvider.feedError != null &&
+            _feedProvider.feedPosts.isEmpty) {
           return _buildErrorState();
         }
 
@@ -172,7 +178,8 @@ class _FeedPageState extends State<FeedPage> with SingleTickerProviderStateMixin
           onRefresh: () => _feedProvider.loadFeed(refresh: true),
           child: ListView.builder(
             padding: const EdgeInsets.symmetric(vertical: 8),
-            itemCount: _feedProvider.feedPosts.length +
+            itemCount:
+                _feedProvider.feedPosts.length +
                 (_feedProvider.feedHasMore ? 1 : 0),
             itemBuilder: (context, index) {
               if (index >= _feedProvider.feedPosts.length) {
@@ -210,10 +217,7 @@ class _FeedPageState extends State<FeedPage> with SingleTickerProviderStateMixin
             const SizedBox(height: 24),
             const Text(
               'Something went wrong',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-              ),
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 12),
             Text(
@@ -241,17 +245,16 @@ class _FeedPageState extends State<FeedPage> with SingleTickerProviderStateMixin
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => PostDetailScreen(
-          postId: post.id,
-          initialPost: post,
-        ),
+        builder: (context) =>
+            PostDetailScreen(postId: post.id, initialPost: post),
       ),
     );
   }
 
   void _navigateToProfile(String userId) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Navigate to profile: $userId')),
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => UserProfilePage(userId: userId)),
     );
   }
 
@@ -264,48 +267,46 @@ class _FeedPageState extends State<FeedPage> with SingleTickerProviderStateMixin
             mainAxisAlignment: MainAxisAlignment.center,
             mainAxisSize: MainAxisSize.min,
             children: [
-            Icon(
-              Icons.fitness_center,
-              size: 80,
-              color: Colors.grey[300],
-            ),
-            const SizedBox(height: 24),
-            const Text(
-              'No Posts Yet',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: Colors.black87,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'Start following other runners or complete your first run to see posts in your feed',
-              style: TextStyle(
-                fontSize: 16,
-                color: Colors.grey[600],
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 32),
-            ElevatedButton.icon(
-              onPressed: () {
-                // Navigate to map or search
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Find runners feature coming soon!')),
-                );
-              },
-              icon: const Icon(Icons.search),
-              label: const Text('Find Runners'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF7ED321),
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+              Icon(Icons.fitness_center, size: 80, color: Colors.grey[300]),
+              const SizedBox(height: 24),
+              const Text(
+                'No Posts Yet',
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
                 ),
               ),
-            ),
+              const SizedBox(height: 12),
+              Text(
+                'Start following other runners or complete your first run to see posts in your feed',
+                style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 32),
+              ElevatedButton.icon(
+                onPressed: () {
+                  // Navigate to map or search
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Find runners feature coming soon!'),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.search),
+                label: const Text('Find Runners'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF7ED321),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 32,
+                    vertical: 16,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
             ],
           ),
         ),

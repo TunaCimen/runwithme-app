@@ -19,11 +19,7 @@ class FriendsResult<T> {
   });
 
   factory FriendsResult.success(T data, {String? message}) {
-    return FriendsResult._(
-      success: true,
-      data: data,
-      message: message,
-    );
+    return FriendsResult._(success: true, data: data, message: message);
   }
 
   factory FriendsResult.failure({String? message, String? errorCode}) {
@@ -69,10 +65,8 @@ class FriendsRepository {
   }
 
   /// Get sent friend requests
-  Future<FriendsResult<PaginatedFriendsResponse<FriendRequestDto>>> getSentRequests({
-    int page = 0,
-    int size = 10,
-  }) async {
+  Future<FriendsResult<PaginatedFriendsResponse<FriendRequestDto>>>
+  getSentRequests({int page = 0, int size = 10}) async {
     try {
       final result = await _apiClient.getSentRequests(page: page, size: size);
       return FriendsResult.success(result);
@@ -84,12 +78,13 @@ class FriendsRepository {
   }
 
   /// Get received friend requests
-  Future<FriendsResult<PaginatedFriendsResponse<FriendRequestDto>>> getReceivedRequests({
-    int page = 0,
-    int size = 10,
-  }) async {
+  Future<FriendsResult<PaginatedFriendsResponse<FriendRequestDto>>>
+  getReceivedRequests({int page = 0, int size = 10}) async {
     try {
-      final result = await _apiClient.getReceivedRequests(page: page, size: size);
+      final result = await _apiClient.getReceivedRequests(
+        page: page,
+        size: size,
+      );
       return FriendsResult.success(result);
     } on DioException catch (e) {
       return _handleDioError(e);
@@ -99,7 +94,9 @@ class FriendsRepository {
   }
 
   /// Accept a friend request
-  Future<FriendsResult<FriendRequestDto>> acceptRequest(String requestId) async {
+  Future<FriendsResult<FriendRequestDto>> acceptRequest(
+    String requestId,
+  ) async {
     try {
       final result = await _apiClient.respondToRequest(
         requestId,
@@ -114,7 +111,9 @@ class FriendsRepository {
   }
 
   /// Reject a friend request
-  Future<FriendsResult<FriendRequestDto>> rejectRequest(String requestId) async {
+  Future<FriendsResult<FriendRequestDto>> rejectRequest(
+    String requestId,
+  ) async {
     try {
       final result = await _apiClient.respondToRequest(
         requestId,

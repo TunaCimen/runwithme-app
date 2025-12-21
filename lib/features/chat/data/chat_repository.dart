@@ -18,19 +18,11 @@ class ChatResult<T> {
   });
 
   factory ChatResult.success(T data, {String? message}) {
-    return ChatResult._(
-      success: true,
-      data: data,
-      message: message,
-    );
+    return ChatResult._(success: true, data: data, message: message);
   }
 
   factory ChatResult.failure({String? message, String? errorCode}) {
-    return ChatResult._(
-      success: false,
-      message: message,
-      errorCode: errorCode,
-    );
+    return ChatResult._(success: false, message: message, errorCode: errorCode);
   }
 }
 
@@ -112,9 +104,15 @@ class ChatRepository {
   }
 
   /// Mark messages as read
-  Future<ChatResult<void>> markAsRead({String? otherUserId, List<int>? messageIds}) async {
+  Future<ChatResult<void>> markAsRead({
+    String? otherUserId,
+    List<int>? messageIds,
+  }) async {
     try {
-      await _apiClient.markAsRead(otherUserId: otherUserId, messageIds: messageIds);
+      await _apiClient.markAsRead(
+        otherUserId: otherUserId,
+        messageIds: messageIds,
+      );
       return ChatResult.success(null);
     } on DioException catch (e) {
       return _handleDioError(e);

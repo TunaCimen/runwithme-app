@@ -6,11 +6,7 @@ class RouteLikeDto {
   final String? userId;
   final String? createdAt;
 
-  RouteLikeDto({
-    this.routeId,
-    this.userId,
-    this.createdAt,
-  });
+  RouteLikeDto({this.routeId, this.userId, this.createdAt});
 
   /// Create from JSON
   factory RouteLikeDto.fromJson(Map<String, dynamic> json) {

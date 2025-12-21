@@ -1,4 +1,7 @@
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 import '../../../../core/utils/profile_pic_helper.dart';
 import '../../data/models/feed_post_dto.dart';
 
@@ -39,14 +42,20 @@ class FeedPostCard extends StatelessWidget {
             _buildHeader(),
             if (post.textContent != null && post.textContent!.isNotEmpty)
               _buildContent(),
+            // Show run/route title
+            if (post.postType == PostType.run ||
+                post.postType == PostType.route)
+              _buildRunTitle(),
             // Show route preview for run/route type posts
-            if (post.postType == PostType.run || post.postType == PostType.route)
+            if (post.postType == PostType.run ||
+                post.postType == PostType.route)
               _buildRoutePreview(),
             // Show photo if mediaUrl is present (for any post type)
             if (post.mediaUrl != null && post.mediaUrl!.isNotEmpty)
               _buildPhoto(),
             // Show stats for run/route type posts
-            if (post.postType == PostType.run || post.postType == PostType.route)
+            if (post.postType == PostType.run ||
+                post.postType == PostType.route)
               _buildStats(),
             _buildDivider(),
             _buildActions(),
@@ -57,7 +66,9 @@ class FeedPostCard extends StatelessWidget {
   }
 
   Widget _buildHeader() {
-    final profilePicUrl = ProfilePicHelper.getProfilePicUrl(post.authorProfilePic);
+    final profilePicUrl = ProfilePicHelper.getProfilePicUrl(
+      post.authorProfilePic,
+    );
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Row(
@@ -105,10 +116,7 @@ class FeedPostCard extends StatelessWidget {
                   ),
                   Text(
                     post.timeAgo,
-                    style: TextStyle(
-                      color: Colors.grey[600],
-                      fontSize: 13,
-                    ),
+                    style: TextStyle(color: Colors.grey[600], fontSize: 13),
                   ),
                 ],
               ),
@@ -136,15 +144,17 @@ class FeedPostCard extends StatelessWidget {
         color = Colors.blue;
         label = 'Route';
         break;
-      case PostType.photo:
-        icon = Icons.photo_camera;
-        color = Colors.purple;
-        label = 'Photo';
-        break;
       case PostType.text:
-        icon = Icons.chat_bubble_outline;
-        color = Colors.grey;
-        label = 'Post';
+        // Text posts with media show as photo, otherwise as post
+        if (post.mediaUrl != null && post.mediaUrl!.isNotEmpty) {
+          icon = Icons.photo_camera;
+          color = Colors.purple;
+          label = 'Photo';
+        } else {
+          icon = Icons.chat_bubble_outline;
+          color = Colors.grey;
+          label = 'Post';
+        }
         break;
     }
 
@@ -193,56 +203,277 @@ class FeedPostCard extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Text(
         post.textContent!,
-        style: const TextStyle(
-          fontSize: 15,
-          height: 1.4,
-        ),
+        style: const TextStyle(fontSize: 15, height: 1.4),
+      ),
+    );
+  }
+
+  Widget _buildRunTitle() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      child: Row(
+        children: [
+          Icon(
+            post.postType == PostType.run ? Icons.directions_run : Icons.route,
+            size: 18,
+            color: const Color(0xFF7ED321),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              post.displayTitle,
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildRoutePreview() {
+    // Debug logging for route points analysis
+    debugPrint('[FeedPostCard] Route preview for post ${post.id}:');
+    debugPrint('[FeedPostCard]   postType: ${post.postType}');
+    debugPrint(
+      '[FeedPostCard]   routeId: ${post.routeId}, runSessionId: ${post.runSessionId}',
+    );
+    debugPrint(
+      '[FeedPostCard]   routePoints: ${post.routePoints?.length ?? 0} points',
+    );
+    debugPrint(
+      '[FeedPostCard]   startPoint: (${post.startPointLat}, ${post.startPointLon})',
+    );
+    debugPrint(
+      '[FeedPostCard]   endPoint: (${post.endPointLat}, ${post.endPointLon})',
+    );
+    if (post.routePoints != null && post.routePoints!.isNotEmpty) {
+      debugPrint('[FeedPostCard]   First point: ${post.routePoints!.first}');
+      debugPrint('[FeedPostCard]   Last point: ${post.routePoints!.last}');
+    }
+
+    // Check if we have route points to display
+    final hasPoints = post.routePoints != null && post.routePoints!.length > 1;
+    final hasCoordinates =
+        post.startPointLat != null && post.startPointLon != null;
+
+    debugPrint(
+      '[FeedPostCard]   hasPoints: $hasPoints, hasCoordinates: $hasCoordinates',
+    );
+
+    if (!hasPoints && !hasCoordinates) {
+      // Show placeholder if no coordinates available
+      return Padding(
+        padding: const EdgeInsets.all(16),
+        child: Container(
+          height: 140,
+          decoration: BoxDecoration(
+            color: const Color(0xFFF8F8F8),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Stack(
+            children: [
+              CustomPaint(
+                size: const Size(double.infinity, 140),
+                painter: _RoutePathPainter(),
+              ),
+              const Positioned(
+                left: 16,
+                bottom: 16,
+                child: _RouteBadge(label: 'Start', color: Color(0xFF2196F3)),
+              ),
+              const Positioned(
+                right: 16,
+                top: 16,
+                child: _RouteBadge(label: 'Finish', color: Color(0xFFFF4444)),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Build list of points for the polyline
+    List<LatLng> points = [];
+    if (hasPoints) {
+      points = post.routePoints!
+          .map((p) => LatLng(p['latitude']!, p['longitude']!))
+          .toList();
+    } else if (hasCoordinates) {
+      points = [
+        LatLng(post.startPointLat!, post.startPointLon!),
+        if (post.endPointLat != null && post.endPointLon != null)
+          LatLng(post.endPointLat!, post.endPointLon!),
+      ];
+    }
+
+    if (points.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    // Calculate center and zoom
+    final center = _calculateCenter(points);
+    final zoom = _calculateZoom(points);
+
     return Padding(
       padding: const EdgeInsets.all(16),
-      child: Container(
-        height: 140,
-        decoration: BoxDecoration(
-          color: const Color(0xFFF8F8F8),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Stack(
-          children: [
-            CustomPaint(
-              size: const Size(double.infinity, 140),
-              painter: _RoutePathPainter(),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: SizedBox(
+          height: 160,
+          child: FlutterMap(
+            options: MapOptions(
+              initialCenter: center,
+              initialZoom: zoom,
+              interactionOptions: const InteractionOptions(
+                flags: InteractiveFlag.none,
+              ),
             ),
-            const Positioned(
-              left: 16,
-              bottom: 16,
-              child: _RouteBadge(label: 'Start', color: Color(0xFF2196F3)),
-            ),
-            const Positioned(
-              right: 16,
-              top: 16,
-              child: _RouteBadge(label: 'Finish', color: Color(0xFFFF4444)),
-            ),
-          ],
+            children: [
+              TileLayer(
+                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                userAgentPackageName: 'com.example.runwithme_app',
+              ),
+              PolylineLayer(
+                polylines: [
+                  Polyline(
+                    points: points,
+                    strokeWidth: 4.0,
+                    color: const Color(0xFF7ED321),
+                  ),
+                ],
+              ),
+              MarkerLayer(
+                markers: [
+                  // Start marker
+                  Marker(
+                    point: points.first,
+                    width: 24,
+                    height: 24,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.green,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white, width: 2),
+                      ),
+                      child: const Icon(
+                        Icons.play_arrow,
+                        color: Colors.white,
+                        size: 14,
+                      ),
+                    ),
+                  ),
+                  // End marker
+                  if (points.length > 1)
+                    Marker(
+                      point: points.last,
+                      width: 24,
+                      height: 24,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Colors.red,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white, width: 2),
+                        ),
+                        child: const Icon(
+                          Icons.stop,
+                          color: Colors.white,
+                          size: 14,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
+  LatLng _calculateCenter(List<LatLng> points) {
+    if (points.isEmpty) return const LatLng(0, 0);
+    if (points.length == 1) return points.first;
+
+    double minLat = points.first.latitude;
+    double maxLat = points.first.latitude;
+    double minLon = points.first.longitude;
+    double maxLon = points.first.longitude;
+
+    for (var point in points) {
+      if (point.latitude < minLat) minLat = point.latitude;
+      if (point.latitude > maxLat) maxLat = point.latitude;
+      if (point.longitude < minLon) minLon = point.longitude;
+      if (point.longitude > maxLon) maxLon = point.longitude;
+    }
+
+    return LatLng((minLat + maxLat) / 2, (minLon + maxLon) / 2);
+  }
+
+  double _calculateZoom(List<LatLng> points) {
+    if (points.isEmpty || points.length == 1) return 15.0;
+
+    double minLat = points.first.latitude;
+    double maxLat = points.first.latitude;
+    double minLon = points.first.longitude;
+    double maxLon = points.first.longitude;
+
+    for (var point in points) {
+      if (point.latitude < minLat) minLat = point.latitude;
+      if (point.latitude > maxLat) maxLat = point.latitude;
+      if (point.longitude < minLon) minLon = point.longitude;
+      if (point.longitude > maxLon) maxLon = point.longitude;
+    }
+
+    final latDiff = maxLat - minLat;
+    final lonDiff = maxLon - minLon;
+    final maxDiff = latDiff > lonDiff ? latDiff : lonDiff;
+
+    if (maxDiff < 0.005) return 15.0;
+    if (maxDiff < 0.01) return 14.0;
+    if (maxDiff < 0.02) return 13.0;
+    if (maxDiff < 0.05) return 12.0;
+    if (maxDiff < 0.1) return 11.0;
+    if (maxDiff < 0.2) return 10.0;
+    return 9.0;
+  }
+
   Widget _buildPhoto() {
+    debugPrint('[FeedPostCard] Raw mediaUrl: ${post.mediaUrl}');
+    final imageUrl = post.getFullMediaUrl();
+    debugPrint('[FeedPostCard] Full imageUrl: $imageUrl');
+    if (imageUrl == null) return const SizedBox.shrink();
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(12),
         child: Image.network(
-          post.mediaUrl!,
+          imageUrl,
           height: 200,
           width: double.infinity,
           fit: BoxFit.cover,
+          loadingBuilder: (context, child, loadingProgress) {
+            if (loadingProgress == null) return child;
+            return Container(
+              height: 200,
+              color: Colors.grey[200],
+              child: Center(
+                child: CircularProgressIndicator(
+                  value: loadingProgress.expectedTotalBytes != null
+                      ? loadingProgress.cumulativeBytesLoaded /
+                            loadingProgress.expectedTotalBytes!
+                      : null,
+                  color: const Color(0xFF7ED321),
+                ),
+              ),
+            );
+          },
           errorBuilder: (context, error, stackTrace) {
+            debugPrint(
+              '[FeedPostCard] Image load error: $error for URL: $imageUrl',
+            );
             return Container(
               height: 200,
               color: Colors.grey[200],
@@ -280,19 +511,10 @@ class FeedPostCard extends StatelessWidget {
       children: [
         Text(
           value,
-          style: const TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-          ),
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
         ),
         const SizedBox(height: 4),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 13,
-            color: Colors.grey[600],
-          ),
-        ),
+        Text(label, style: TextStyle(fontSize: 13, color: Colors.grey[600])),
       ],
     );
   }
@@ -398,17 +620,23 @@ class _RoutePathPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round;
 
-    final path = Path();
+    final path = ui.Path();
     path.moveTo(size.width * 0.15, size.height * 0.75);
     path.cubicTo(
-      size.width * 0.3, size.height * 0.6,
-      size.width * 0.4, size.height * 0.5,
-      size.width * 0.5, size.height * 0.45,
+      size.width * 0.3,
+      size.height * 0.6,
+      size.width * 0.4,
+      size.height * 0.5,
+      size.width * 0.5,
+      size.height * 0.45,
     );
     path.cubicTo(
-      size.width * 0.6, size.height * 0.4,
-      size.width * 0.7, size.height * 0.3,
-      size.width * 0.85, size.height * 0.25,
+      size.width * 0.6,
+      size.height * 0.4,
+      size.width * 0.7,
+      size.height * 0.3,
+      size.width * 0.85,
+      size.height * 0.25,
     );
 
     canvas.drawPath(path, paint);

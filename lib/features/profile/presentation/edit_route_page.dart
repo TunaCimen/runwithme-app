@@ -34,7 +34,9 @@ class _EditRoutePageState extends State<EditRoutePage> {
   void initState() {
     super.initState();
     _titleController = TextEditingController(text: widget.route.title ?? '');
-    _descriptionController = TextEditingController(text: widget.route.description ?? '');
+    _descriptionController = TextEditingController(
+      text: widget.route.description ?? '',
+    );
     _selectedDifficulty = widget.route.difficulty;
     _isPublic = widget.route.isPublic;
   }
@@ -62,7 +64,9 @@ class _EditRoutePageState extends State<EditRoutePage> {
     // Update only editable fields
     final result = await widget.routeRepository.updateRouteFields(
       routeId: widget.route.id,
-      title: _titleController.text.trim().isEmpty ? null : _titleController.text.trim(),
+      title: _titleController.text.trim().isEmpty
+          ? null
+          : _titleController.text.trim(),
       description: _descriptionController.text.trim().isEmpty
           ? null
           : _descriptionController.text.trim(),
@@ -210,11 +214,15 @@ class _EditRoutePageState extends State<EditRoutePage> {
                   selectedColor: const Color(0xFF7ED321),
                   labelStyle: TextStyle(
                     color: isSelected ? Colors.white : Colors.black87,
-                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                    fontWeight: isSelected
+                        ? FontWeight.w600
+                        : FontWeight.normal,
                   ),
                   backgroundColor: Colors.grey[200],
                   side: BorderSide(
-                    color: isSelected ? const Color(0xFF7ED321) : Colors.grey[300]!,
+                    color: isSelected
+                        ? const Color(0xFF7ED321)
+                        : Colors.grey[300]!,
                   ),
                 );
               }).toList(),
@@ -239,16 +247,19 @@ class _EditRoutePageState extends State<EditRoutePage> {
               child: SwitchListTile(
                 title: const Text('Public Route'),
                 subtitle: Text(
-                  _isPublic
-                      ? 'Visible to all users'
-                      : 'Only visible to you',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: Colors.grey[600],
-                  ),
+                  _isPublic ? 'Visible to all users' : 'Only visible to you',
+                  style: TextStyle(fontSize: 13, color: Colors.grey[600]),
                 ),
                 value: _isPublic,
-                activeColor: const Color(0xFF7ED321),
+                activeTrackColor: const Color(
+                  0xFF7ED321,
+                ).withValues(alpha: 0.5),
+                thumbColor: WidgetStateProperty.resolveWith((states) {
+                  if (states.contains(WidgetState.selected)) {
+                    return const Color(0xFF7ED321);
+                  }
+                  return null;
+                }),
                 onChanged: (value) {
                   setState(() {
                     _isPublic = value;
@@ -317,19 +328,10 @@ class _EditRoutePageState extends State<EditRoutePage> {
         const SizedBox(height: 4),
         Text(
           value,
-          style: const TextStyle(
-            fontSize: 15,
-            fontWeight: FontWeight.w600,
-          ),
+          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
         ),
         const SizedBox(height: 2),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            color: Colors.grey[600],
-          ),
-        ),
+        Text(label, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
       ],
     );
   }

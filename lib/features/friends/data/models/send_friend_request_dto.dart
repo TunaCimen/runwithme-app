@@ -3,16 +3,10 @@ class SendFriendRequestDto {
   final String receiverId;
   final String? message;
 
-  SendFriendRequestDto({
-    required this.receiverId,
-    this.message,
-  });
+  SendFriendRequestDto({required this.receiverId, this.message});
 
   Map<String, dynamic> toJson() {
-    return {
-      'receiverId': receiverId,
-      if (message != null) 'message': message,
-    };
+    return {'receiverId': receiverId, if (message != null) 'message': message};
   }
 
   @override
@@ -28,11 +22,11 @@ class RespondToRequestDto {
   RespondToRequestDto({required this.status});
 
   Map<String, dynamic> toJson() {
-    return {
-      'status': status,
-    };
+    return {'status': status};
   }
 
-  static RespondToRequestDto accept() => RespondToRequestDto(status: 'ACCEPTED');
-  static RespondToRequestDto reject() => RespondToRequestDto(status: 'REJECTED');
+  static RespondToRequestDto accept() =>
+      RespondToRequestDto(status: 'ACCEPTED');
+  static RespondToRequestDto reject() =>
+      RespondToRequestDto(status: 'REJECTED');
 }

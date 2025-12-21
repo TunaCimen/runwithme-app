@@ -42,37 +42,43 @@ class FriendshipDto {
   });
 
   factory FriendshipDto.fromJson(Map<String, dynamic> json) {
-    // Debug: print raw JSON to see field names
-    print('[FriendshipDto] Raw JSON: $json');
-    print('[FriendshipDto] JSON keys: ${json.keys.toList()}');
-
     // Handle the new API structure with nested "user" object
     final userObj = json['user'] as Map<String, dynamic>?;
 
     if (userObj != null) {
-      print('[FriendshipDto] Found nested user object: $userObj');
       return FriendshipDto(
-        friendUserId: userObj['userId'] ?? userObj['user_id'] ?? userObj['id']?.toString() ?? '',
+        friendUserId:
+            userObj['userId'] ??
+            userObj['user_id'] ??
+            userObj['id']?.toString() ??
+            '',
         friendUsername: userObj['username'],
         friendEmail: userObj['email'],
-        friendProfilePic: userObj['profilePic'] ?? userObj['profile_pic'] ?? userObj['profilePicUrl'],
+        friendProfilePic:
+            userObj['profilePic'] ??
+            userObj['profile_pic'] ??
+            userObj['profilePicUrl'],
         friendFirstName: userObj['firstName'] ?? userObj['first_name'],
         friendLastName: userObj['lastName'] ?? userObj['last_name'],
         friendsSince: json['friendsSince'] != null
             ? DateTime.parse(json['friendsSince'])
             : (json['friends_since'] != null
-                ? DateTime.parse(json['friends_since'])
-                : (json['createdAt'] != null
-                    ? DateTime.parse(json['createdAt'])
-                    : DateTime.now())),
-        friendshipId: json['friendshipId'] ?? json['friendship_id'] ?? json['id']?.toString() ?? '',
+                  ? DateTime.parse(json['friends_since'])
+                  : (json['createdAt'] != null
+                        ? DateTime.parse(json['createdAt'])
+                        : DateTime.now())),
+        friendshipId:
+            json['friendshipId'] ??
+            json['friendship_id'] ??
+            json['id']?.toString() ??
+            '',
       );
     }
 
-    // Fallback: Handle old structure with user1Id/user2Id (if backend changes)
-    print('[FriendshipDto] No nested user object, using legacy parsing');
+    // Fallback: Handle old structure with user1Id/user2Id
     return FriendshipDto(
-      friendUserId: json['user2Id'] ?? json['user2_id'] ?? json['userId2'] ?? '',
+      friendUserId:
+          json['user2Id'] ?? json['user2_id'] ?? json['userId2'] ?? '',
       friendUsername: json['user2Username'] ?? json['user2_username'],
       friendProfilePic: json['user2ProfilePic'] ?? json['user2_profile_pic'],
       friendFirstName: json['user2FirstName'] ?? json['user2_first_name'],
@@ -80,9 +86,13 @@ class FriendshipDto {
       friendsSince: json['createdAt'] != null
           ? DateTime.parse(json['createdAt'])
           : (json['created_at'] != null
-              ? DateTime.parse(json['created_at'])
-              : DateTime.now()),
-      friendshipId: json['friendshipId'] ?? json['friendship_id'] ?? json['id']?.toString() ?? '',
+                ? DateTime.parse(json['created_at'])
+                : DateTime.now()),
+      friendshipId:
+          json['friendshipId'] ??
+          json['friendship_id'] ??
+          json['id']?.toString() ??
+          '',
       user1Id: json['user1Id'] ?? json['user1_id'] ?? '',
       user2Id: json['user2Id'] ?? json['user2_id'] ?? '',
     );

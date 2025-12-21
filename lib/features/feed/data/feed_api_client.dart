@@ -29,11 +29,11 @@ class PaginatedFeedResponse<T> {
 class FeedApiClient {
   final Dio _dio;
 
-  FeedApiClient({
-    required String baseUrl,
-    Dio? dio,
-  }) : _dio = dio ??
-            Dio(BaseOptions(
+  FeedApiClient({required String baseUrl, Dio? dio})
+    : _dio =
+          dio ??
+          Dio(
+            BaseOptions(
               baseUrl: baseUrl,
               connectTimeout: const Duration(seconds: 10),
               receiveTimeout: const Duration(seconds: 20),
@@ -41,7 +41,8 @@ class FeedApiClient {
                 'Accept': 'application/json',
                 'Content-Type': 'application/json',
               },
-            ));
+            ),
+          );
 
   /// Set authorization token
   void setAuthToken(String token) {
@@ -63,10 +64,6 @@ class FeedApiClient {
       queryParameters: {'page': page, 'size': size},
     );
     final data = _decodeResponse(response.data);
-    // Debug: print first post to see structure
-    if (data['content'] != null && (data['content'] as List).isNotEmpty) {
-      print('[FeedApiClient] First post raw data: ${data['content'][0]}');
-    }
     return _parsePaginatedResponse(data, FeedPostDto.fromJson);
   }
 
@@ -140,7 +137,9 @@ class FeedApiClient {
 
   /// Check if current user has liked a post
   Future<bool> checkIfLiked(int postId) async {
-    final response = await _dio.get('/api/v1/feed-post-likes/post/$postId/check');
+    final response = await _dio.get(
+      '/api/v1/feed-post-likes/post/$postId/check',
+    );
     final data = _decodeResponse(response.data);
     // The response could be a boolean directly or wrapped in an object
     if (data is bool) return data;
@@ -150,7 +149,9 @@ class FeedApiClient {
 
   /// Get like count for a post
   Future<int> getLikeCount(int postId) async {
-    final response = await _dio.get('/api/v1/feed-post-likes/post/$postId/count');
+    final response = await _dio.get(
+      '/api/v1/feed-post-likes/post/$postId/count',
+    );
     final data = _decodeResponse(response.data);
     // The response could be an int directly or wrapped in an object
     if (data is int) return data;
@@ -204,7 +205,9 @@ class FeedApiClient {
 
   /// Get comment count for a post
   Future<int> getCommentCount(int postId) async {
-    final response = await _dio.get('/api/v1/feed-post-comments/post/$postId/count');
+    final response = await _dio.get(
+      '/api/v1/feed-post-comments/post/$postId/count',
+    );
     final data = _decodeResponse(response.data);
     // The response could be an int directly or wrapped in an object
     if (data is int) return data;
@@ -265,7 +268,8 @@ class FeedApiClient {
     Map<String, dynamic> data,
     T Function(Map<String, dynamic>) fromJson,
   ) {
-    final content = (data['content'] as List<dynamic>?)
+    final content =
+        (data['content'] as List<dynamic>?)
             ?.map((e) => fromJson(e as Map<String, dynamic>))
             .toList() ??
         [];

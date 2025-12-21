@@ -19,12 +19,15 @@ class User {
       userId: json['userId'] as String? ?? json['user_id'] as String? ?? '',
       username: json['username'] as String,
       email: json['email'] as String,
-      passwordHash: json['passwordHash'] as String? ?? json['password_hash'] as String? ?? '',
+      passwordHash:
+          json['passwordHash'] as String? ??
+          json['password_hash'] as String? ??
+          '',
       createdAt: json['createdAt'] != null
           ? DateTime.parse(json['createdAt'] as String)
           : json['created_at'] != null
-              ? DateTime.parse(json['created_at'] as String)
-              : DateTime.now(),
+          ? DateTime.parse(json['created_at'] as String)
+          : DateTime.now(),
     );
   }
 

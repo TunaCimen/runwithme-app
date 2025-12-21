@@ -47,7 +47,9 @@ class _LoginPageState extends State<LoginPage> {
       // Try to get email from backend using username
       var email = result.email;
       if (email == null || email.isEmpty) {
-        email = await _authService.getEmailByUsername(_usernameController.text.trim());
+        email = await _authService.getEmailByUsername(
+          _usernameController.text.trim(),
+        );
       }
       if (!mounted) return;
       // Show email not verified message with resend option
@@ -67,7 +69,8 @@ class _LoginPageState extends State<LoginPage> {
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setDialogState) {
-          var hasEmail = emailFromBackend != null && emailFromBackend.isNotEmpty;
+          var hasEmail =
+              emailFromBackend != null && emailFromBackend.isNotEmpty;
 
           return AlertDialog(
             icon: const Icon(
@@ -88,7 +91,10 @@ class _LoginPageState extends State<LoginPage> {
                 if (hasEmail) ...[
                   const SizedBox(height: 12),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.grey[100],
                       borderRadius: BorderRadius.circular(8),
@@ -140,7 +146,8 @@ class _LoginPageState extends State<LoginPage> {
                         setDialogState(() => _isResending = true);
 
                         final navigator = Navigator.of(dialogContext);
-                        final result = await _authService.resendVerificationEmail(email: email);
+                        final result = await _authService
+                            .resendVerificationEmail(email: email);
 
                         if (!mounted) return;
                         setDialogState(() => _isResending = false);
@@ -185,10 +192,7 @@ class _LoginPageState extends State<LoginPage> {
 
   void _showErrorSnackBar(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.red,
-      ),
+      SnackBar(content: Text(message), backgroundColor: Colors.red),
     );
   }
 
@@ -236,10 +240,7 @@ class _LoginPageState extends State<LoginPage> {
                 const SizedBox(height: 8),
                 Text(
                   'Your social running companion',
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: Colors.grey[600],
-                  ),
+                  style: TextStyle(fontSize: 16, color: Colors.grey[600]),
                 ),
                 const SizedBox(height: 40),
 
@@ -277,12 +278,16 @@ class _LoginPageState extends State<LoginPage> {
                           child: Container(
                             padding: const EdgeInsets.symmetric(vertical: 12),
                             decoration: BoxDecoration(
-                              color: _isLoginTab ? Colors.white : Colors.transparent,
+                              color: _isLoginTab
+                                  ? Colors.white
+                                  : Colors.transparent,
                               borderRadius: BorderRadius.circular(26),
                               boxShadow: _isLoginTab
                                   ? [
                                       BoxShadow(
-                                        color: Colors.black.withValues(alpha: 0.05),
+                                        color: Colors.black.withValues(
+                                          alpha: 0.05,
+                                        ),
                                         blurRadius: 8,
                                         offset: const Offset(0, 2),
                                       ),
@@ -294,8 +299,12 @@ class _LoginPageState extends State<LoginPage> {
                               textAlign: TextAlign.center,
                               style: TextStyle(
                                 fontSize: 16,
-                                fontWeight: _isLoginTab ? FontWeight.w600 : FontWeight.normal,
-                                color: _isLoginTab ? Colors.black87 : Colors.grey[600],
+                                fontWeight: _isLoginTab
+                                    ? FontWeight.w600
+                                    : FontWeight.normal,
+                                color: _isLoginTab
+                                    ? Colors.black87
+                                    : Colors.grey[600],
                               ),
                             ),
                           ),
@@ -313,7 +322,9 @@ class _LoginPageState extends State<LoginPage> {
                           child: Container(
                             padding: const EdgeInsets.symmetric(vertical: 12),
                             decoration: BoxDecoration(
-                              color: !_isLoginTab ? Colors.white : Colors.transparent,
+                              color: !_isLoginTab
+                                  ? Colors.white
+                                  : Colors.transparent,
                               borderRadius: BorderRadius.circular(26),
                             ),
                             child: Text(
@@ -321,8 +332,12 @@ class _LoginPageState extends State<LoginPage> {
                               textAlign: TextAlign.center,
                               style: TextStyle(
                                 fontSize: 16,
-                                fontWeight: !_isLoginTab ? FontWeight.w600 : FontWeight.normal,
-                                color: !_isLoginTab ? Colors.black87 : Colors.grey[600],
+                                fontWeight: !_isLoginTab
+                                    ? FontWeight.w600
+                                    : FontWeight.normal,
+                                color: !_isLoginTab
+                                    ? Colors.black87
+                                    : Colors.grey[600],
                               ),
                             ),
                           ),
@@ -455,7 +470,9 @@ class _LoginPageState extends State<LoginPage> {
                           onPressed: () {
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
-                                content: Text('Forgot password not yet implemented'),
+                                content: Text(
+                                  'Forgot password not yet implemented',
+                                ),
                               ),
                             );
                           },
@@ -511,10 +528,7 @@ class _LoginPageState extends State<LoginPage> {
                 RichText(
                   textAlign: TextAlign.center,
                   text: TextSpan(
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: Colors.grey[600],
-                    ),
+                    style: TextStyle(fontSize: 13, color: Colors.grey[600]),
                     children: const [
                       TextSpan(text: 'By continuing, you agree to our\n'),
                       TextSpan(

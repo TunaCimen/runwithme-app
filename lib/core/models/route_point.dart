@@ -20,12 +20,19 @@ class RoutePoint {
   /// Create from JSON - supports both camelCase and snake_case
   factory RoutePoint.fromJson(Map<String, dynamic> json) {
     return RoutePoint(
-      pointId: (json['pointId'] as num?)?.toInt() ?? (json['point_id'] as num?)?.toInt(),
-      routeId: (json['routeId'] as num?)?.toInt() ?? (json['route_id'] as num?)?.toInt(),
-      seqNo: (json['seqNo'] as num?)?.toInt() ?? (json['seq_no'] as num).toInt(),
+      pointId:
+          (json['pointId'] as num?)?.toInt() ??
+          (json['point_id'] as num?)?.toInt(),
+      routeId:
+          (json['routeId'] as num?)?.toInt() ??
+          (json['route_id'] as num?)?.toInt(),
+      seqNo:
+          (json['seqNo'] as num?)?.toInt() ?? (json['seq_no'] as num).toInt(),
       latitude: (json['latitude'] as num).toDouble(),
       longitude: (json['longitude'] as num).toDouble(),
-      elevationM: (json['elevationM'] as num?)?.toDouble() ?? (json['elevation_m'] as num?)?.toDouble(),
+      elevationM:
+          (json['elevationM'] as num?)?.toDouble() ??
+          (json['elevation_m'] as num?)?.toDouble(),
     );
   }
 

@@ -3,16 +3,10 @@ class LoginRequestDto {
   final String username;
   final String password;
 
-  const LoginRequestDto({
-    required this.username,
-    required this.password,
-  });
+  const LoginRequestDto({required this.username, required this.password});
 
   Map<String, dynamic> toJson() {
-    return {
-      'username': username,
-      'password': password,
-    };
+    return {'username': username, 'password': password};
   }
 }
 
@@ -28,11 +22,7 @@ class RegisterRequestDto {
   });
 
   Map<String, dynamic> toJson() {
-    return {
-      'username': username,
-      'email': email,
-      'password': password,
-    };
+    return {'username': username, 'email': email, 'password': password};
   }
 }
 
@@ -82,18 +72,18 @@ class UserInfoDto {
 
   factory UserInfoDto.fromJson(Map<String, dynamic> json) {
     return UserInfoDto(
-      userId: json['userId'] as String? ?? json['user_id'] as String? ?? json['id']?.toString() ?? '',
+      userId:
+          json['userId'] as String? ??
+          json['user_id'] as String? ??
+          json['id']?.toString() ??
+          '',
       username: json['username'] as String? ?? '',
       email: json['email'] as String? ?? '',
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {
-      'userId': userId,
-      'username': username,
-      'email': email,
-    };
+    return {'userId': userId, 'username': username, 'email': email};
   }
 }
 
@@ -102,11 +92,7 @@ class ApiResponseDto<T> {
   final String? message;
   final T? data;
 
-  const ApiResponseDto({
-    required this.success,
-    this.message,
-    this.data,
-  });
+  const ApiResponseDto({required this.success, this.message, this.data});
 
   factory ApiResponseDto.fromJson(
     Map<String, dynamic> json,
@@ -137,7 +123,8 @@ class RegisterResponseDto {
   factory RegisterResponseDto.fromJson(Map<String, dynamic> json) {
     return RegisterResponseDto(
       message: json['message'] as String? ?? '',
-      emailVerificationRequired: json['emailVerificationRequired'] as bool? ?? true,
+      emailVerificationRequired:
+          json['emailVerificationRequired'] as bool? ?? true,
       email: json['email'] as String? ?? '',
     );
   }
@@ -165,13 +152,9 @@ class EmailVerificationResponseDto {
 class ResendVerificationRequestDto {
   final String email;
 
-  const ResendVerificationRequestDto({
-    required this.email,
-  });
+  const ResendVerificationRequestDto({required this.email});
 
   Map<String, dynamic> toJson() {
-    return {
-      'email': email,
-    };
+    return {'email': email};
   }
 }

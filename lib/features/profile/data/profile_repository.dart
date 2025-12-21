@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import '../../../core/models/user_profile.dart';
+import '../../../core/models/user_statistics.dart';
 import 'profile_api_client.dart';
 import 'image_api_client.dart';
 
@@ -35,9 +36,9 @@ class ProfileRepository {
     String baseUrl = 'http://35.158.35.102:8080',
     ProfileApiClient? apiClient,
     ImageApiClient? imageApiClient,
-  })  : _baseUrl = baseUrl,
-        _apiClient = apiClient ?? ProfileApiClient(baseUrl: baseUrl),
-        _imageApiClient = imageApiClient ?? ImageApiClient(baseUrl: baseUrl);
+  }) : _baseUrl = baseUrl,
+       _apiClient = apiClient ?? ProfileApiClient(baseUrl: baseUrl),
+       _imageApiClient = imageApiClient ?? ImageApiClient(baseUrl: baseUrl);
 
   /// Factory constructor that returns singleton
   factory ProfileRepository({
@@ -71,7 +72,6 @@ class ProfileRepository {
   void clearCache() {
     _profileCache.clear();
     _cacheTimestamps.clear();
-    print('[ProfileRepository] Cache cleared');
   }
 
   /// Get cached profile without API call (returns null if not cached)
@@ -81,7 +81,8 @@ class ProfileRepository {
 
   /// Get user profile by user ID
   /// Set [forceRefresh] to true to bypass cache (e.g., on pull-to-refresh)
-  Future<ProfileResult> getProfile(String userId, {
+  Future<ProfileResult> getProfile(
+    String userId, {
     required String accessToken,
     bool forceRefresh = false,
   }) async {
@@ -91,13 +92,15 @@ class ProfileRepository {
     if (!forceRefresh && _isCacheValid(cacheKey)) {
       final cachedProfile = _profileCache[userId];
       if (cachedProfile != null) {
-        print('[ProfileRepository] Returning cached profile for $userId');
         return ProfileResult.success(profile: cachedProfile);
       }
     }
 
     try {
-      final profile = await _apiClient.getUserProfile(userId, accessToken: accessToken);
+      final profile = await _apiClient.getUserProfile(
+        userId,
+        accessToken: accessToken,
+      );
 
       // Cache the result
       _profileCache[userId] = profile;
@@ -111,10 +114,51 @@ class ProfileRepository {
     }
   }
 
-  /// Create user profile
-  Future<ProfileResult> createProfile(UserProfile profile, {required String accessToken}) async {
+  /// Get all user profiles (paginated)
+  /// Returns a list of all users for matching purposes
+  Future<AllProfilesResult> getAllProfiles({
+    required String accessToken,
+    int page = 0,
+    int size = 20,
+    bool forceRefresh = false,
+  }) async {
     try {
-      final createdProfile = await _apiClient.createUserProfile(profile, accessToken: accessToken);
+      final response = await _apiClient.getAllProfiles(
+        page: page,
+        size: size,
+        accessToken: accessToken,
+      );
+
+      // Cache each profile
+      for (final profile in response.content) {
+        _profileCache[profile.userId] = profile;
+        _updateCacheTimestamp('profile_${profile.userId}');
+      }
+
+      return AllProfilesResult.success(
+        profiles: response.content,
+        totalElements: response.totalElements,
+        totalPages: response.totalPages,
+        hasMore: !response.last,
+      );
+    } on DioException catch (e) {
+      final result = _handleDioException(e, 'Failed to fetch profiles');
+      return AllProfilesResult.failure(message: result.message);
+    } catch (e) {
+      return AllProfilesResult.failure(message: 'An unexpected error occurred');
+    }
+  }
+
+  /// Create user profile
+  Future<ProfileResult> createProfile(
+    UserProfile profile, {
+    required String accessToken,
+  }) async {
+    try {
+      final createdProfile = await _apiClient.createUserProfile(
+        profile,
+        accessToken: accessToken,
+      );
       return ProfileResult.success(profile: createdProfile);
     } on DioException catch (e) {
       return _handleDioException(e, 'Failed to create profile');
@@ -124,7 +168,10 @@ class ProfileRepository {
   }
 
   /// Update user profile
-  Future<ProfileResult> updateProfile(UserProfile profile, {required String accessToken}) async {
+  Future<ProfileResult> updateProfile(
+    UserProfile profile, {
+    required String accessToken,
+  }) async {
     try {
       final updatedProfile = await _apiClient.updateUserProfile(
         profile.userId,
@@ -153,26 +200,15 @@ class ProfileRepository {
     required String accessToken,
   }) async {
     try {
-      // Set auth token for image API
       _imageApiClient.setAuthToken(accessToken);
-
-      // Step 1: Upload the image
-      print('[ProfileRepository] Uploading profile picture...');
       final filename = await _imageApiClient.uploadProfilePicture(filePath);
-      print('[ProfileRepository] Upload successful, filename: $filename');
-
-      // Step 2: Get the full URL for display
-      final profilePicUrl = _imageApiClient.getProfilePictureUrl(filename);
-      print('[ProfileRepository] Profile picture URL: $profilePicUrl');
-
       return ProfilePictureResult.success(profilePicUrl: filename);
     } on DioException catch (e) {
-      print('[ProfileRepository] Upload failed: ${e.message}');
-      print('[ProfileRepository] Response: ${e.response?.data}');
       return _handlePictureDioException(e, 'Failed to upload profile picture');
     } catch (e) {
-      print('[ProfileRepository] Upload error: $e');
-      return ProfilePictureResult.failure(message: 'An unexpected error occurred: $e');
+      return ProfilePictureResult.failure(
+        message: 'An unexpected error occurred',
+      );
     }
   }
 
@@ -183,6 +219,29 @@ class ProfileRepository {
 
   /// Get the base URL
   String get baseUrl => _baseUrl;
+
+  /// Get user statistics
+  Future<UserStatisticsResult> getUserStatistics(
+    String userId, {
+    required String accessToken,
+    int? days,
+  }) async {
+    try {
+      final statistics = await _apiClient.getUserStatistics(
+        userId,
+        accessToken: accessToken,
+        days: days,
+      );
+      return UserStatisticsResult.success(statistics: statistics);
+    } on DioException catch (e) {
+      final result = _handleDioException(e, 'Failed to fetch statistics');
+      return UserStatisticsResult.failure(message: result.message);
+    } catch (e) {
+      return UserStatisticsResult.failure(
+        message: 'An unexpected error occurred',
+      );
+    }
+  }
 
   /// Handle Dio exceptions for profile operations
   ProfileResult _handleDioException(DioException e, String defaultMessage) {
@@ -210,7 +269,10 @@ class ProfileRepository {
   }
 
   /// Handle Dio exceptions for picture upload
-  ProfilePictureResult _handlePictureDioException(DioException e, String defaultMessage) {
+  ProfilePictureResult _handlePictureDioException(
+    DioException e,
+    String defaultMessage,
+  ) {
     String errorMessage = defaultMessage;
 
     if (e.response?.statusCode == 400) {
@@ -241,20 +303,11 @@ class ProfileResult {
     required UserProfile profile,
     String message = 'Success',
   }) {
-    return ProfileResult._(
-      success: true,
-      message: message,
-      profile: profile,
-    );
+    return ProfileResult._(success: true, message: message, profile: profile);
   }
 
-  factory ProfileResult.failure({
-    required String message,
-  }) {
-    return ProfileResult._(
-      success: false,
-      message: message,
-    );
+  factory ProfileResult.failure({required String message}) {
+    return ProfileResult._(success: false, message: message);
   }
 }
 
@@ -281,12 +334,75 @@ class ProfilePictureResult {
     );
   }
 
-  factory ProfilePictureResult.failure({
-    required String message,
+  factory ProfilePictureResult.failure({required String message}) {
+    return ProfilePictureResult._(success: false, message: message);
+  }
+}
+
+/// All profiles result wrapper
+class AllProfilesResult {
+  final bool success;
+  final String message;
+  final List<UserProfile> profiles;
+  final int totalElements;
+  final int totalPages;
+  final bool hasMore;
+
+  const AllProfilesResult._({
+    required this.success,
+    required this.message,
+    this.profiles = const [],
+    this.totalElements = 0,
+    this.totalPages = 0,
+    this.hasMore = false,
+  });
+
+  factory AllProfilesResult.success({
+    required List<UserProfile> profiles,
+    int totalElements = 0,
+    int totalPages = 0,
+    bool hasMore = false,
+    String message = 'Success',
   }) {
-    return ProfilePictureResult._(
-      success: false,
+    return AllProfilesResult._(
+      success: true,
       message: message,
+      profiles: profiles,
+      totalElements: totalElements,
+      totalPages: totalPages,
+      hasMore: hasMore,
     );
+  }
+
+  factory AllProfilesResult.failure({required String message}) {
+    return AllProfilesResult._(success: false, message: message);
+  }
+}
+
+/// User statistics result wrapper
+class UserStatisticsResult {
+  final bool success;
+  final String message;
+  final UserStatistics? statistics;
+
+  const UserStatisticsResult._({
+    required this.success,
+    required this.message,
+    this.statistics,
+  });
+
+  factory UserStatisticsResult.success({
+    required UserStatistics statistics,
+    String message = 'Success',
+  }) {
+    return UserStatisticsResult._(
+      success: true,
+      message: message,
+      statistics: statistics,
+    );
+  }
+
+  factory UserStatisticsResult.failure({required String message}) {
+    return UserStatisticsResult._(success: false, message: message);
   }
 }

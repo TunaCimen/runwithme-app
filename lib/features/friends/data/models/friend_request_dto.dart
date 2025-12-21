@@ -62,28 +62,40 @@ class FriendRequestDto {
   });
 
   factory FriendRequestDto.fromJson(Map<String, dynamic> json) {
-    // Debug: print raw JSON to see field names
-    print('[FriendRequestDto] Raw JSON: $json');
-    print('[FriendRequestDto] JSON keys: ${json.keys.toList()}');
-
     // Handle nested sender/receiver objects (from list endpoints)
     final senderObj = json['sender'] as Map<String, dynamic>?;
     final receiverObj = json['receiver'] as Map<String, dynamic>?;
 
     // Extract IDs - try nested objects first, then flat fields
-    final senderId = senderObj?['userId'] ?? senderObj?['user_id'] ??
-                     json['senderId'] ?? json['sender_id'] ?? '';
-    final receiverId = receiverObj?['userId'] ?? receiverObj?['user_id'] ??
-                       json['receiverId'] ?? json['receiver_id'] ?? '';
+    final senderId =
+        senderObj?['userId'] ??
+        senderObj?['user_id'] ??
+        json['senderId'] ??
+        json['sender_id'] ??
+        '';
+    final receiverId =
+        receiverObj?['userId'] ??
+        receiverObj?['user_id'] ??
+        json['receiverId'] ??
+        json['receiver_id'] ??
+        '';
 
     // Extract usernames - try nested objects first
-    final senderUsername = senderObj?['username'] ?? json['senderUsername'] ?? json['sender_username'];
-    final receiverUsername = receiverObj?['username'] ?? json['receiverUsername'] ?? json['receiver_username'];
-
-    print('[FriendRequestDto] Parsed: senderId=$senderId, receiverId=$receiverId, senderUsername=$senderUsername, receiverUsername=$receiverUsername');
+    final senderUsername =
+        senderObj?['username'] ??
+        json['senderUsername'] ??
+        json['sender_username'];
+    final receiverUsername =
+        receiverObj?['username'] ??
+        json['receiverUsername'] ??
+        json['receiver_username'];
 
     return FriendRequestDto(
-      requestId: json['requestId'] ?? json['request_id'] ?? json['id']?.toString() ?? '',
+      requestId:
+          json['requestId'] ??
+          json['request_id'] ??
+          json['id']?.toString() ??
+          '',
       senderId: senderId,
       receiverId: receiverId,
       status: FriendRequestStatus.fromString(json['status'] ?? 'PENDING'),
@@ -91,21 +103,45 @@ class FriendRequestDto {
       createdAt: json['createdAt'] != null
           ? DateTime.parse(json['createdAt'])
           : (json['created_at'] != null
-              ? DateTime.parse(json['created_at'])
-              : DateTime.now()),
+                ? DateTime.parse(json['created_at'])
+                : DateTime.now()),
       updatedAt: json['updatedAt'] != null
           ? DateTime.parse(json['updatedAt'])
           : (json['updated_at'] != null
-              ? DateTime.parse(json['updated_at'])
-              : DateTime.now()),
+                ? DateTime.parse(json['updated_at'])
+                : DateTime.now()),
       senderUsername: senderUsername,
-      senderProfilePic: senderObj?['profilePic'] ?? senderObj?['profile_pic'] ?? json['senderProfilePic'] ?? json['sender_profile_pic'],
-      senderFirstName: senderObj?['firstName'] ?? senderObj?['first_name'] ?? json['senderFirstName'] ?? json['sender_first_name'],
-      senderLastName: senderObj?['lastName'] ?? senderObj?['last_name'] ?? json['senderLastName'] ?? json['sender_last_name'],
+      senderProfilePic:
+          senderObj?['profilePic'] ??
+          senderObj?['profile_pic'] ??
+          json['senderProfilePic'] ??
+          json['sender_profile_pic'],
+      senderFirstName:
+          senderObj?['firstName'] ??
+          senderObj?['first_name'] ??
+          json['senderFirstName'] ??
+          json['sender_first_name'],
+      senderLastName:
+          senderObj?['lastName'] ??
+          senderObj?['last_name'] ??
+          json['senderLastName'] ??
+          json['sender_last_name'],
       receiverUsername: receiverUsername,
-      receiverProfilePic: receiverObj?['profilePic'] ?? receiverObj?['profile_pic'] ?? json['receiverProfilePic'] ?? json['receiver_profile_pic'],
-      receiverFirstName: receiverObj?['firstName'] ?? receiverObj?['first_name'] ?? json['receiverFirstName'] ?? json['receiver_first_name'],
-      receiverLastName: receiverObj?['lastName'] ?? receiverObj?['last_name'] ?? json['receiverLastName'] ?? json['receiver_last_name'],
+      receiverProfilePic:
+          receiverObj?['profilePic'] ??
+          receiverObj?['profile_pic'] ??
+          json['receiverProfilePic'] ??
+          json['receiver_profile_pic'],
+      receiverFirstName:
+          receiverObj?['firstName'] ??
+          receiverObj?['first_name'] ??
+          json['receiverFirstName'] ??
+          json['receiver_first_name'],
+      receiverLastName:
+          receiverObj?['lastName'] ??
+          receiverObj?['last_name'] ??
+          json['receiverLastName'] ??
+          json['receiver_last_name'],
     );
   }
 

@@ -32,13 +32,18 @@ class CommentDto {
 
     // Extract author info from nested object or flat fields
     String? authorUsername = json['authorUsername'] ?? json['author_username'];
-    String? authorProfilePic = json['authorProfilePic'] ?? json['author_profile_pic'];
-    String? authorFirstName = json['authorFirstName'] ?? json['author_first_name'];
+    String? authorProfilePic =
+        json['authorProfilePic'] ?? json['author_profile_pic'];
+    String? authorFirstName =
+        json['authorFirstName'] ?? json['author_first_name'];
     String? authorLastName = json['authorLastName'] ?? json['author_last_name'];
 
     if (authorData != null) {
       authorUsername ??= authorData['username'] ?? authorData['userName'];
-      authorProfilePic ??= authorData['profilePic'] ?? authorData['profile_pic'] ?? authorData['profilePicUrl'];
+      authorProfilePic ??=
+          authorData['profilePic'] ??
+          authorData['profile_pic'] ??
+          authorData['profilePicUrl'];
       authorFirstName ??= authorData['firstName'] ?? authorData['first_name'];
       authorLastName ??= authorData['lastName'] ?? authorData['last_name'];
     }
@@ -51,8 +56,8 @@ class CommentDto {
       createdAt: json['createdAt'] != null
           ? DateTime.parse(json['createdAt'])
           : (json['created_at'] != null
-              ? DateTime.parse(json['created_at'])
-              : DateTime.now()),
+                ? DateTime.parse(json['created_at'])
+                : DateTime.now()),
       authorUsername: authorUsername,
       authorProfilePic: authorProfilePic,
       authorFirstName: authorFirstName,

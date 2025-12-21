@@ -35,10 +35,14 @@ class SentRequestTile extends StatelessWidget {
             children: [
               Builder(
                 builder: (context) {
-                  final profilePicUrl = ProfilePicHelper.getProfilePicUrl(request.receiverProfilePic);
+                  final profilePicUrl = ProfilePicHelper.getProfilePicUrl(
+                    request.receiverProfilePic,
+                  );
                   return CircleAvatar(
                     radius: 24,
-                    backgroundColor: const Color(0xFF7ED321).withValues(alpha: 0.2),
+                    backgroundColor: const Color(
+                      0xFF7ED321,
+                    ).withValues(alpha: 0.2),
                     backgroundImage: profilePicUrl != null
                         ? NetworkImage(profilePicUrl)
                         : null,

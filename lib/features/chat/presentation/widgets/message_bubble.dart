@@ -24,8 +24,9 @@ class MessageBubble extends StatelessWidget {
         bottom: 4,
       ),
       child: Column(
-        crossAxisAlignment:
-            isSent ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+        crossAxisAlignment: isSent
+            ? CrossAxisAlignment.end
+            : CrossAxisAlignment.start,
         children: [
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -67,10 +68,7 @@ class MessageBubble extends StatelessWidget {
                 children: [
                   Text(
                     message.timeString,
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: Colors.grey[500],
-                    ),
+                    style: TextStyle(fontSize: 11, color: Colors.grey[500]),
                   ),
                   if (isSent) ...[
                     const SizedBox(width: 4),

@@ -23,27 +23,24 @@ class ConversationDto {
   });
 
   factory ConversationDto.fromJson(Map<String, dynamic> json) {
-    // Debug: print raw JSON to see field names
-    print('[ConversationDto] Raw JSON: $json');
-    print('[ConversationDto] JSON keys: ${json.keys.toList()}');
-
     return ConversationDto(
       oderId: json['otherId'] ?? json['other_id'] ?? '',
-      otherUsername: json['otherUsername'] ?? json['other_username'] ?? 'Unknown',
+      otherUsername:
+          json['otherUsername'] ?? json['other_username'] ?? 'Unknown',
       otherProfilePic: json['otherProfilePic'] ?? json['other_profile_pic'],
       otherFirstName: json['otherFirstName'] ?? json['other_first_name'],
       otherLastName: json['otherLastName'] ?? json['other_last_name'],
       lastMessage: json['lastMessage'] != null
           ? MessageDto.fromJson(json['lastMessage'])
           : (json['last_message'] != null
-              ? MessageDto.fromJson(json['last_message'])
-              : null),
+                ? MessageDto.fromJson(json['last_message'])
+                : null),
       unreadCount: json['unreadCount'] ?? json['unread_count'] ?? 0,
       lastMessageAt: json['lastMessageAt'] != null
           ? DateTime.parse(json['lastMessageAt'])
           : (json['last_message_at'] != null
-              ? DateTime.parse(json['last_message_at'])
-              : null),
+                ? DateTime.parse(json['last_message_at'])
+                : null),
     );
   }
 
@@ -56,7 +53,8 @@ class ConversationDto {
       if (otherLastName != null) 'otherLastName': otherLastName,
       if (lastMessage != null) 'lastMessage': lastMessage!.toJson(),
       'unreadCount': unreadCount,
-      if (lastMessageAt != null) 'lastMessageAt': lastMessageAt!.toIso8601String(),
+      if (lastMessageAt != null)
+        'lastMessageAt': lastMessageAt!.toIso8601String(),
     };
   }
 
@@ -106,7 +104,11 @@ class ConversationDto {
 
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    final messageDate = DateTime(lastMessageAt!.year, lastMessageAt!.month, lastMessageAt!.day);
+    final messageDate = DateTime(
+      lastMessageAt!.year,
+      lastMessageAt!.month,
+      lastMessageAt!.day,
+    );
 
     if (messageDate == today) {
       return '${lastMessageAt!.hour.toString().padLeft(2, '0')}:${lastMessageAt!.minute.toString().padLeft(2, '0')}';

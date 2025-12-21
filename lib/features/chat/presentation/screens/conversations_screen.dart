@@ -62,7 +62,9 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
       );
     } else {
       // No friends, just show empty state
-      debugPrint('[ConversationsScreen] No friends to build conversations from');
+      debugPrint(
+        '[ConversationsScreen] No friends to build conversations from',
+      );
     }
   }
 
@@ -122,11 +124,7 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
                       onTap: () => _openConversation(conversation.oderId),
                     ),
                     if (index < _chatProvider.conversations.length - 1)
-                      Divider(
-                        height: 1,
-                        indent: 72,
-                        color: Colors.grey[200],
-                      ),
+                      Divider(height: 1, indent: 72, color: Colors.grey[200]),
                   ],
                 );
               },
@@ -157,10 +155,7 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
             const SizedBox(height: 12),
             Text(
               'Start a conversation with other runners!',
-              style: TextStyle(
-                fontSize: 16,
-                color: Colors.grey[600],
-              ),
+              style: TextStyle(fontSize: 16, color: Colors.grey[600]),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 24),
@@ -171,8 +166,10 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF7ED321),
                 foregroundColor: Colors.white,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
@@ -204,10 +201,7 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
             const SizedBox(height: 12),
             Text(
               _chatProvider.conversationsError ?? 'Failed to load messages',
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey[600],
-              ),
+              style: TextStyle(fontSize: 14, color: Colors.grey[600]),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 24),
@@ -228,7 +222,9 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
 
   void _openConversation(String userId) {
     final conversation = _chatProvider.getConversationWith(userId);
-    final profilePicUrl = ProfilePicHelper.getProfilePicUrl(conversation?.otherProfilePic);
+    final profilePicUrl = ProfilePicHelper.getProfilePicUrl(
+      conversation?.otherProfilePic,
+    );
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -306,18 +302,24 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
                   child: ListenableBuilder(
                     listenable: friendsProvider,
                     builder: (context, _) {
-                      if (friendsProvider.friendsLoading && friendsProvider.friends.isEmpty) {
+                      if (friendsProvider.friendsLoading &&
+                          friendsProvider.friends.isEmpty) {
                         return const Center(child: CircularProgressIndicator());
                       }
 
-                      if (friendsProvider.friendsError != null && friendsProvider.friends.isEmpty) {
+                      if (friendsProvider.friendsError != null &&
+                          friendsProvider.friends.isEmpty) {
                         return Center(
                           child: Padding(
                             padding: const EdgeInsets.all(32),
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Icon(Icons.error_outline, size: 48, color: Colors.red[300]),
+                                Icon(
+                                  Icons.error_outline,
+                                  size: 48,
+                                  color: Colors.red[300],
+                                ),
                                 const SizedBox(height: 16),
                                 Text(
                                   friendsProvider.friendsError!,
@@ -326,7 +328,9 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
                                 ),
                                 const SizedBox(height: 16),
                                 ElevatedButton(
-                                  onPressed: () => friendsProvider.loadFriends(refresh: true),
+                                  onPressed: () => friendsProvider.loadFriends(
+                                    refresh: true,
+                                  ),
                                   child: const Text('Retry'),
                                 ),
                               ],
@@ -342,7 +346,11 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Icon(Icons.people_outline, size: 64, color: Colors.grey[300]),
+                                Icon(
+                                  Icons.people_outline,
+                                  size: 64,
+                                  color: Colors.grey[300],
+                                ),
                                 const SizedBox(height: 16),
                                 const Text(
                                   'No Friends Yet',
@@ -370,20 +378,35 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
                         itemCount: friendsProvider.friends.length,
                         itemBuilder: (context, index) {
                           final friendship = friendsProvider.friends[index];
-                          final friendId = friendship.getFriendId(currentUserId);
-                          final displayName = friendship.getFriendDisplayName(currentUserId);
-                          final username = friendship.getFriendUsername(currentUserId);
-                          final profilePic = friendship.getFriendProfilePic(currentUserId);
-                          final profilePicUrl = ProfilePicHelper.getProfilePicUrl(profilePic);
+                          final friendId = friendship.getFriendId(
+                            currentUserId,
+                          );
+                          final displayName = friendship.getFriendDisplayName(
+                            currentUserId,
+                          );
+                          final username = friendship.getFriendUsername(
+                            currentUserId,
+                          );
+                          final profilePic = friendship.getFriendProfilePic(
+                            currentUserId,
+                          );
+                          final profilePicUrl =
+                              ProfilePicHelper.getProfilePicUrl(profilePic);
 
                           return ListTile(
                             leading: CircleAvatar(
                               radius: 24,
-                              backgroundColor: const Color(0xFF7ED321).withValues(alpha: 0.2),
-                              backgroundImage: profilePicUrl != null ? NetworkImage(profilePicUrl) : null,
+                              backgroundColor: const Color(
+                                0xFF7ED321,
+                              ).withValues(alpha: 0.2),
+                              backgroundImage: profilePicUrl != null
+                                  ? NetworkImage(profilePicUrl)
+                                  : null,
                               child: profilePicUrl == null
                                   ? Text(
-                                      displayName.isNotEmpty ? displayName[0].toUpperCase() : '?',
+                                      displayName.isNotEmpty
+                                          ? displayName[0].toUpperCase()
+                                          : '?',
                                       style: const TextStyle(
                                         color: Color(0xFF7ED321),
                                         fontWeight: FontWeight.bold,

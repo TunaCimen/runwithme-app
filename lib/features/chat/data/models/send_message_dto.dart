@@ -3,16 +3,10 @@ class SendMessageDto {
   final String recipientId;
   final String content;
 
-  SendMessageDto({
-    required this.recipientId,
-    required this.content,
-  });
+  SendMessageDto({required this.recipientId, required this.content});
 
   Map<String, dynamic> toJson() {
-    return {
-      'recipientId': recipientId,
-      'content': content,
-    };
+    return {'recipientId': recipientId, 'content': content};
   }
 
   @override

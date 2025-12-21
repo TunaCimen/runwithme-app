@@ -29,11 +29,11 @@ class PaginatedFriendsResponse<T> {
 class FriendsApiClient {
   final Dio _dio;
 
-  FriendsApiClient({
-    required String baseUrl,
-    Dio? dio,
-  }) : _dio = dio ??
-            Dio(BaseOptions(
+  FriendsApiClient({required String baseUrl, Dio? dio})
+    : _dio =
+          dio ??
+          Dio(
+            BaseOptions(
               baseUrl: baseUrl,
               connectTimeout: const Duration(seconds: 10),
               receiveTimeout: const Duration(seconds: 20),
@@ -41,7 +41,8 @@ class FriendsApiClient {
                 'Accept': 'application/json',
                 'Content-Type': 'application/json',
               },
-            ));
+            ),
+          );
 
   /// Set authorization token
   void setAuthToken(String token) {
@@ -54,7 +55,9 @@ class FriendsApiClient {
   }
 
   /// Send a friend request
-  Future<FriendRequestDto> sendFriendRequest(SendFriendRequestDto request) async {
+  Future<FriendRequestDto> sendFriendRequest(
+    SendFriendRequestDto request,
+  ) async {
     final response = await _dio.post(
       '/api/v1/friends/requests',
       data: request.toJson(),
@@ -110,13 +113,10 @@ class FriendsApiClient {
     int page = 0,
     int size = 10,
   }) async {
-    print('[FriendsApiClient] getFriends called: page=$page, size=$size');
     final response = await _dio.get(
       '/api/v1/friends',
       queryParameters: {'page': page, 'size': size},
     );
-    print('[FriendsApiClient] getFriends response status: ${response.statusCode}');
-    print('[FriendsApiClient] getFriends raw response: ${response.data}');
     final data = _decodeResponse(response.data);
     return _parsePaginatedResponse(data, FriendshipDto.fromJson);
   }
@@ -147,7 +147,8 @@ class FriendsApiClient {
     Map<String, dynamic> data,
     T Function(Map<String, dynamic>) fromJson,
   ) {
-    final content = (data['content'] as List<dynamic>?)
+    final content =
+        (data['content'] as List<dynamic>?)
             ?.map((e) => fromJson(e as Map<String, dynamic>))
             .toList() ??
         [];
@@ -166,9 +167,9 @@ class FriendsApiClient {
 
 /// Friendship status types
 enum FriendshipStatusType {
-  none,          // No relationship
-  friends,       // Already friends
-  pendingSent,   // Current user sent request
+  none, // No relationship
+  friends, // Already friends
+  pendingSent, // Current user sent request
   pendingReceived, // Current user received request
 }
 

@@ -19,7 +19,9 @@ class CommentTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final profilePicUrl = ProfilePicHelper.getProfilePicUrl(comment.authorProfilePic);
+    final profilePicUrl = ProfilePicHelper.getProfilePicUrl(
+      comment.authorProfilePic,
+    );
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Row(
@@ -67,20 +69,14 @@ class CommentTile extends StatelessWidget {
                     const SizedBox(width: 8),
                     Text(
                       comment.timeAgo,
-                      style: TextStyle(
-                        color: Colors.grey[500],
-                        fontSize: 12,
-                      ),
+                      style: TextStyle(color: Colors.grey[500], fontSize: 12),
                     ),
                   ],
                 ),
                 const SizedBox(height: 4),
                 Text(
                   comment.commentText,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    height: 1.4,
-                  ),
+                  style: const TextStyle(fontSize: 14, height: 1.4),
                 ),
               ],
             ),

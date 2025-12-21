@@ -11,24 +11,27 @@ class BaseApiClient {
     Duration receiveTimeout = const Duration(seconds: 20),
     Map<String, dynamic>? headers,
   }) {
-    dio = Dio(BaseOptions(
-      baseUrl: baseUrl,
-      connectTimeout: connectTimeout,
-      receiveTimeout: receiveTimeout,
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-        ...?headers,
-      },
-    ));
+    dio = Dio(
+      BaseOptions(
+        baseUrl: baseUrl,
+        connectTimeout: connectTimeout,
+        receiveTimeout: receiveTimeout,
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          ...?headers,
+        },
+      ),
+    );
 
-    // Add interceptors for logging in debug mode
-    dio.interceptors.add(LogInterceptor(
-      requestBody: true,
-      responseBody: true,
-      error: true,
-      logPrint: (obj) => print('[API] $obj'),
-    ));
+    // Logging disabled to reduce console noise
+    // Uncomment for debugging API calls:
+    // dio.interceptors.add(LogInterceptor(
+    //   requestBody: true,
+    //   responseBody: true,
+    //   error: true,
+    //   logPrint: (obj) => print('[API] $obj'),
+    // ));
   }
 
   /// Add authorization header

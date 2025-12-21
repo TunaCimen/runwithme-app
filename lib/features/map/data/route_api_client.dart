@@ -1,14 +1,13 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import '../../../core/api/base_api_client.dart';
 import 'models/route_dto.dart';
 import 'models/route_like_dto.dart';
 
 /// API client for route-related endpoints
 class RouteApiClient extends BaseApiClient {
-  RouteApiClient({
-    String baseUrl = 'http://35.158.35.102:8080',
-    Dio? dio,
-  }) : super(baseUrl: '$baseUrl/api/v1');
+  RouteApiClient({String baseUrl = 'http://35.158.35.102:8080', Dio? dio})
+    : super(baseUrl: '$baseUrl/api/v1');
 
   // ==================== Routes ====================
 
@@ -24,13 +23,12 @@ class RouteApiClient extends BaseApiClient {
 
     final response = await dio.get(
       '/routes',
-      queryParameters: {
-        'page': page,
-        'size': size,
-      },
+      queryParameters: {'page': page, 'size': size},
     );
 
-    return PaginatedRouteResponse.fromJson(response.data as Map<String, dynamic>);
+    return PaginatedRouteResponse.fromJson(
+      response.data as Map<String, dynamic>,
+    );
   }
 
   /// Get public routes (paginated)
@@ -45,13 +43,12 @@ class RouteApiClient extends BaseApiClient {
 
     final response = await dio.get(
       '/routes/public',
-      queryParameters: {
-        'page': page,
-        'size': size,
-      },
+      queryParameters: {'page': page, 'size': size},
     );
 
-    return PaginatedRouteResponse.fromJson(response.data as Map<String, dynamic>);
+    return PaginatedRouteResponse.fromJson(
+      response.data as Map<String, dynamic>,
+    );
   }
 
   /// Get nearby routes
@@ -78,7 +75,9 @@ class RouteApiClient extends BaseApiClient {
       },
     );
 
-    return PaginatedRouteResponse.fromJson(response.data as Map<String, dynamic>);
+    return PaginatedRouteResponse.fromJson(
+      response.data as Map<String, dynamic>,
+    );
   }
 
   /// Get route by ID
@@ -98,10 +97,7 @@ class RouteApiClient extends BaseApiClient {
   }) async {
     setAuthToken(accessToken);
 
-    final response = await dio.post(
-      '/routes',
-      data: route.toJson(),
-    );
+    final response = await dio.post('/routes', data: route.toJson());
 
     return RouteDto.fromJson(response.data as Map<String, dynamic>);
   }
@@ -114,10 +110,7 @@ class RouteApiClient extends BaseApiClient {
   }) async {
     setAuthToken(accessToken);
 
-    final response = await dio.put(
-      '/routes/$routeId',
-      data: route.toJson(),
-    );
+    final response = await dio.put('/routes/$routeId', data: route.toJson());
 
     return RouteDto.fromJson(response.data as Map<String, dynamic>);
   }
@@ -139,12 +132,20 @@ class RouteApiClient extends BaseApiClient {
     if (difficulty != null) data['difficulty'] = difficulty;
     if (isPublic != null) data['public'] = isPublic;
 
-    final response = await dio.put(
-      '/routes/$routeId',
-      data: data,
-    );
+    debugPrint('[RouteApiClient] updateRouteFields: PUT /routes/$routeId');
+    debugPrint('[RouteApiClient] Request data: $data');
 
-    return RouteDto.fromJson(response.data as Map<String, dynamic>);
+    try {
+      final response = await dio.put('/routes/$routeId', data: data);
+
+      debugPrint('[RouteApiClient] Response status: ${response.statusCode}');
+      debugPrint('[RouteApiClient] Response data: ${response.data}');
+
+      return RouteDto.fromJson(response.data as Map<String, dynamic>);
+    } catch (e) {
+      debugPrint('[RouteApiClient] ERROR: $e');
+      rethrow;
+    }
   }
 
   /// Delete a route
@@ -169,13 +170,12 @@ class RouteApiClient extends BaseApiClient {
 
     final response = await dio.get(
       '/routes/difficulty/$difficulty',
-      queryParameters: {
-        'page': page,
-        'size': size,
-      },
+      queryParameters: {'page': page, 'size': size},
     );
 
-    return PaginatedRouteResponse.fromJson(response.data as Map<String, dynamic>);
+    return PaginatedRouteResponse.fromJson(
+      response.data as Map<String, dynamic>,
+    );
   }
 
   /// Get similar routes (KNN)
@@ -191,10 +191,7 @@ class RouteApiClient extends BaseApiClient {
 
     final response = await dio.get(
       '/routes/$routeId/similar',
-      queryParameters: {
-        'maxDistance': maxDistance,
-        'limit': limit,
-      },
+      queryParameters: {'maxDistance': maxDistance, 'limit': limit},
     );
 
     return (response.data as List)
@@ -240,10 +237,7 @@ class RouteApiClient extends BaseApiClient {
   }
 
   /// Get like count for a route
-  Future<int> getLikeCount({
-    required int routeId,
-    String? accessToken,
-  }) async {
+  Future<int> getLikeCount({required int routeId, String? accessToken}) async {
     if (accessToken != null) {
       setAuthToken(accessToken);
     }
@@ -257,8 +251,9 @@ class RouteApiClient extends BaseApiClient {
     } else if (data is Map) {
       // Try common field names for count
       return (data['count'] as num?)?.toInt() ??
-             (data['likeCount'] as num?)?.toInt() ??
-             (data['total'] as num?)?.toInt() ?? 0;
+          (data['likeCount'] as num?)?.toInt() ??
+          (data['total'] as num?)?.toInt() ??
+          0;
     } else if (data is String) {
       return int.tryParse(data) ?? 0;
     }
@@ -278,13 +273,12 @@ class RouteApiClient extends BaseApiClient {
 
     final response = await dio.get(
       '/route-likes/route/$routeId',
-      queryParameters: {
-        'page': page,
-        'size': size,
-      },
+      queryParameters: {'page': page, 'size': size},
     );
 
-    return PaginatedRouteLikeResponse.fromJson(response.data as Map<String, dynamic>);
+    return PaginatedRouteLikeResponse.fromJson(
+      response.data as Map<String, dynamic>,
+    );
   }
 
   /// Get user's liked routes (paginated)
@@ -300,12 +294,11 @@ class RouteApiClient extends BaseApiClient {
 
     final response = await dio.get(
       '/route-likes/user/$userId',
-      queryParameters: {
-        'page': page,
-        'size': size,
-      },
+      queryParameters: {'page': page, 'size': size},
     );
 
-    return PaginatedRouteLikeResponse.fromJson(response.data as Map<String, dynamic>);
+    return PaginatedRouteLikeResponse.fromJson(
+      response.data as Map<String, dynamic>,
+    );
   }
 }

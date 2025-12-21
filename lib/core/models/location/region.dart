@@ -22,12 +22,7 @@ class Region {
   }
 
   Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'name': name,
-      'flag': flag,
-      'wikiDataId': wikiDataId,
-    };
+    return {'id': id, 'name': name, 'flag': flag, 'wikiDataId': wikiDataId};
   }
 
   @override
@@ -35,12 +30,7 @@ class Region {
     return 'Region(id: $id, name: $name)';
   }
 
-  Region copyWith({
-    int? id,
-    String? name,
-    int? flag,
-    String? wikiDataId,
-  }) {
+  Region copyWith({int? id, String? name, int? flag, String? wikiDataId}) {
     return Region(
       id: id ?? this.id,
       name: name ?? this.name,

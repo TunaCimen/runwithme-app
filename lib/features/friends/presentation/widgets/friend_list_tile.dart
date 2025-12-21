@@ -27,7 +27,9 @@ class FriendListTile extends StatelessWidget {
       leading: CircleAvatar(
         radius: 24,
         backgroundColor: const Color(0xFF7ED321).withValues(alpha: 0.2),
-        backgroundImage: profilePicUrl != null ? NetworkImage(profilePicUrl!) : null,
+        backgroundImage: profilePicUrl != null
+            ? NetworkImage(profilePicUrl!)
+            : null,
         child: profilePicUrl == null
             ? Text(
                 displayName.isNotEmpty ? displayName[0].toUpperCase() : '?',
@@ -41,25 +43,16 @@ class FriendListTile extends StatelessWidget {
       ),
       title: Text(
         displayName,
-        style: const TextStyle(
-          fontWeight: FontWeight.w600,
-          fontSize: 15,
-        ),
+        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
       ),
       subtitle: subtitle != null || username != null
           ? Text(
               subtitle ?? '@$username',
-              style: TextStyle(
-                color: Colors.grey[600],
-                fontSize: 13,
-              ),
+              style: TextStyle(color: Colors.grey[600], fontSize: 13),
             )
           : null,
       trailing: trailing != null
-          ? Row(
-              mainAxisSize: MainAxisSize.min,
-              children: trailing!,
-            )
+          ? Row(mainAxisSize: MainAxisSize.min, children: trailing!)
           : null,
     );
   }

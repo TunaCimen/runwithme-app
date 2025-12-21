@@ -69,14 +69,14 @@ class CreatePostDto {
     );
   }
 
-  /// Create a photo post
+  /// Create a photo post (photos are TEXT posts with mediaUrl)
   factory CreatePostDto.photo({
     required String mediaUrl,
     String? description,
     PostVisibility visibility = PostVisibility.public,
   }) {
     return CreatePostDto(
-      postType: PostType.photo,
+      postType: PostType.text,
       mediaUrl: mediaUrl,
       textContent: description,
       visibility: visibility,
@@ -96,8 +96,6 @@ class AddCommentDto {
   AddCommentDto({required this.commentText});
 
   Map<String, dynamic> toJson() {
-    return {
-      'commentText': commentText,
-    };
+    return {'commentText': commentText};
   }
 }

@@ -56,7 +56,9 @@ class ChatProvider extends ChangeNotifier {
 
   /// Set authentication token
   void setAuthToken(String token) {
-    _log('setAuthToken called: token=${token.substring(0, token.length > 10 ? 10 : token.length)}...');
+    _log(
+      'setAuthToken called: token=${token.substring(0, token.length > 10 ? 10 : token.length)}...',
+    );
     _repository.setAuthToken(token);
   }
 
@@ -75,7 +77,9 @@ class ChatProvider extends ChangeNotifier {
 
     final result = await _repository.getAllMessages();
 
-    _log('  API result: success=${result.success}, errorCode=${result.errorCode}, message=${result.message}');
+    _log(
+      '  API result: success=${result.success}, errorCode=${result.errorCode}, message=${result.message}',
+    );
 
     if (result.success && result.data != null) {
       final messages = result.data!;
@@ -86,7 +90,9 @@ class ChatProvider extends ChangeNotifier {
       _log('  Built ${_conversations.length} conversations');
 
       for (final c in _conversations) {
-        _log('    Conversation: otherId=${c.oderId}, otherUsername=${c.otherUsername}, otherDisplayName=${c.otherDisplayName}');
+        _log(
+          '    Conversation: otherId=${c.oderId}, otherUsername=${c.otherUsername}, otherDisplayName=${c.otherDisplayName}',
+        );
       }
       // Sort by last message time (most recent first)
       _conversations.sort((a, b) {
@@ -95,7 +101,10 @@ class ChatProvider extends ChangeNotifier {
         return bTime.compareTo(aTime);
       });
       // Calculate total unread count
-      _totalUnreadCount = _conversations.fold(0, (sum, c) => sum + c.unreadCount);
+      _totalUnreadCount = _conversations.fold(
+        0,
+        (sum, c) => sum + c.unreadCount,
+      );
     } else if (result.errorCode == 'NOT_FOUND') {
       // No conversations exist yet - this is OK, just show empty state
       _log('  No conversations found (404) - treating as empty list');
@@ -112,7 +121,10 @@ class ChatProvider extends ChangeNotifier {
   }
 
   /// Build conversations list from messages
-  List<ConversationDto> _buildConversationsFromMessages(List<MessageDto> messages, String? currentUserId) {
+  List<ConversationDto> _buildConversationsFromMessages(
+    List<MessageDto> messages,
+    String? currentUserId,
+  ) {
     final Map<String, ConversationDto> conversationMap = {};
 
     for (final message in messages) {
@@ -126,10 +138,20 @@ class ChatProvider extends ChangeNotifier {
         final isFromOther = message.senderId != currentUserId;
         conversationMap[otherUserId] = ConversationDto(
           oderId: otherUserId,
-          otherUsername: (isFromOther ? message.senderUsername : message.recipientUsername) ?? 'Unknown',
-          otherProfilePic: isFromOther ? message.senderProfilePic : message.recipientProfilePic,
-          otherFirstName: isFromOther ? message.senderFirstName : message.recipientFirstName,
-          otherLastName: isFromOther ? message.senderLastName : message.recipientLastName,
+          otherUsername:
+              (isFromOther
+                  ? message.senderUsername
+                  : message.recipientUsername) ??
+              'Unknown',
+          otherProfilePic: isFromOther
+              ? message.senderProfilePic
+              : message.recipientProfilePic,
+          otherFirstName: isFromOther
+              ? message.senderFirstName
+              : message.recipientFirstName,
+          otherLastName: isFromOther
+              ? message.senderLastName
+              : message.recipientLastName,
           lastMessage: message,
           lastMessageAt: message.createdAt,
           unreadCount: (!message.isRead && isFromOther) ? 1 : 0,
@@ -144,7 +166,9 @@ class ChatProvider extends ChangeNotifier {
           );
         }
         // Update last message if this one is more recent
-        if (message.createdAt.isAfter(existing.lastMessageAt ?? DateTime(1970))) {
+        if (message.createdAt.isAfter(
+          existing.lastMessageAt ?? DateTime(1970),
+        )) {
           conversationMap[otherUserId] = existing.copyWith(
             lastMessage: message,
             lastMessageAt: message.createdAt,
@@ -158,7 +182,10 @@ class ChatProvider extends ChangeNotifier {
 
   /// Build conversations list from friends by checking chat history for each
   /// This is a workaround until the backend implements GET /conversations
-  Future<void> buildConversationsFromFriends(List<FriendshipDto> friends, String currentUserId) async {
+  Future<void> buildConversationsFromFriends(
+    List<FriendshipDto> friends,
+    String currentUserId,
+  ) async {
     _log('buildConversationsFromFriends called: ${friends.length} friends');
 
     if (_conversationsLoading) {
@@ -182,22 +209,33 @@ class ChatProvider extends ChangeNotifier {
       _log('  Checking chat history with: $friendUsername ($friendId)');
 
       try {
-        final result = await _repository.getChatHistory(friendId, page: 0, size: 1);
+        final result = await _repository.getChatHistory(
+          friendId,
+          page: 0,
+          size: 1,
+        );
 
-        if (result.success && result.data != null && result.data!.content.isNotEmpty) {
+        if (result.success &&
+            result.data != null &&
+            result.data!.content.isNotEmpty) {
           final lastMessage = result.data!.content.first;
-          _log('    -> Has messages, last: "${lastMessage.content.substring(0, lastMessage.content.length > 20 ? 20 : lastMessage.content.length)}..."');
+          _log(
+            '    -> Has messages, last: "${lastMessage.content.substring(0, lastMessage.content.length > 20 ? 20 : lastMessage.content.length)}..."',
+          );
 
-          builtConversations.add(ConversationDto(
-            oderId: friendId,
-            otherUsername: friendUsername ?? friendDisplayName,
-            otherProfilePic: friendProfilePic,
-            otherFirstName: friend.friendFirstName,
-            otherLastName: friend.friendLastName,
-            lastMessage: lastMessage,
-            lastMessageAt: lastMessage.createdAt,
-            unreadCount: 0, // We don't have this info without the backend endpoint
-          ));
+          builtConversations.add(
+            ConversationDto(
+              oderId: friendId,
+              otherUsername: friendUsername ?? friendDisplayName,
+              otherProfilePic: friendProfilePic,
+              otherFirstName: friend.friendFirstName,
+              otherLastName: friend.friendLastName,
+              lastMessage: lastMessage,
+              lastMessageAt: lastMessage.createdAt,
+              unreadCount:
+                  0, // We don't have this info without the backend endpoint
+            ),
+          );
         } else if (result.errorCode == 'NOT_FOUND') {
           _log('    -> No messages yet');
         } else {
@@ -239,15 +277,21 @@ class ChatProvider extends ChangeNotifier {
     _log('  Marking conversation as read...');
     await _repository.markConversationAsRead(userId);
     _updateConversationUnread(userId, 0);
-    _log('  openConversation complete: ${_currentMessages.length} messages loaded');
+    _log(
+      '  openConversation complete: ${_currentMessages.length} messages loaded',
+    );
   }
 
   /// Load messages for the current conversation
   Future<void> loadMessages({bool refresh = false}) async {
-    _log('loadMessages called: refresh=$refresh, activeConversationUserId=$_activeConversationUserId');
+    _log(
+      'loadMessages called: refresh=$refresh, activeConversationUserId=$_activeConversationUserId',
+    );
 
     if (_activeConversationUserId == null || _messagesLoading) {
-      _log('  -> Skipping: activeConversationUserId=$_activeConversationUserId, messagesLoading=$_messagesLoading');
+      _log(
+        '  -> Skipping: activeConversationUserId=$_activeConversationUserId, messagesLoading=$_messagesLoading',
+      );
       return;
     }
 
@@ -265,7 +309,9 @@ class ChatProvider extends ChangeNotifier {
       page: _messagesPage,
     );
 
-    _log('  API result: success=${result.success}, errorCode=${result.errorCode}, message=${result.message}');
+    _log(
+      '  API result: success=${result.success}, errorCode=${result.errorCode}, message=${result.message}',
+    );
 
     if (result.success && result.data != null) {
       _log('  Got ${result.data!.content.length} messages');
@@ -302,7 +348,9 @@ class ChatProvider extends ChangeNotifier {
 
   /// Send a message
   Future<ChatResult<MessageDto>> sendMessage(String content) async {
-    _log('sendMessage called: content="${content.substring(0, content.length > 20 ? 20 : content.length)}...", activeConversationUserId=$_activeConversationUserId');
+    _log(
+      'sendMessage called: content="${content.substring(0, content.length > 20 ? 20 : content.length)}...", activeConversationUserId=$_activeConversationUserId',
+    );
 
     if (_activeConversationUserId == null) {
       _log('  -> Error: No active conversation');
@@ -317,7 +365,9 @@ class ChatProvider extends ChangeNotifier {
       content: content,
     );
 
-    _log('  API result: success=${result.success}, errorCode=${result.errorCode}, message=${result.message}');
+    _log(
+      '  API result: success=${result.success}, errorCode=${result.errorCode}, message=${result.message}',
+    );
 
     if (result.success && result.data != null) {
       _log('  Message sent successfully, id=${result.data!.id}');
@@ -429,7 +479,9 @@ class ChatProvider extends ChangeNotifier {
     final index = _conversations.indexWhere((c) => c.oderId == userId);
     if (index != -1) {
       final oldCount = _conversations[index].unreadCount;
-      _conversations[index] = _conversations[index].copyWith(unreadCount: count);
+      _conversations[index] = _conversations[index].copyWith(
+        unreadCount: count,
+      );
       _totalUnreadCount = _totalUnreadCount - oldCount + count;
       notifyListeners();
     }

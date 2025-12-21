@@ -10,11 +10,7 @@ class PostDetailScreen extends StatefulWidget {
   final int postId;
   final FeedPostDto? initialPost;
 
-  const PostDetailScreen({
-    super.key,
-    required this.postId,
-    this.initialPost,
-  });
+  const PostDetailScreen({super.key, required this.postId, this.initialPost});
 
   @override
   State<PostDetailScreen> createState() => _PostDetailScreenState();
@@ -87,7 +83,8 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
           onPressed: () => Navigator.pop(context),
         ),
         actions: [
-          if (_post != null && _post!.authorId == _authService.currentUser?.userId)
+          if (_post != null &&
+              _post!.authorId == _authService.currentUser?.userId)
             PopupMenuButton<String>(
               icon: const Icon(Icons.more_vert, color: Colors.black87),
               itemBuilder: (context) => [
@@ -152,10 +149,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
             padding: const EdgeInsets.all(16),
             child: Text(
               'Comments (${_post?.commentsCount ?? 0})',
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-              ),
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
             ),
           ),
           if (comments.isEmpty && !isLoading)
@@ -164,8 +158,11 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
               child: Center(
                 child: Column(
                   children: [
-                    Icon(Icons.chat_bubble_outline,
-                        size: 48, color: Colors.grey[300]),
+                    Icon(
+                      Icons.chat_bubble_outline,
+                      size: 48,
+                      color: Colors.grey[300],
+                    ),
                     const SizedBox(height: 16),
                     Text(
                       'No comments yet',
@@ -327,10 +324,15 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     );
 
     if (confirmed == true) {
-      final result = await _feedProvider.deleteComment(widget.postId, commentId);
+      final result = await _feedProvider.deleteComment(
+        widget.postId,
+        commentId,
+      );
       if (result.success && mounted) {
         setState(() {
-          _post = _post?.copyWith(commentsCount: (_post?.commentsCount ?? 1) - 1);
+          _post = _post?.copyWith(
+            commentsCount: (_post?.commentsCount ?? 1) - 1,
+          );
         });
       }
     }
@@ -371,8 +373,8 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   }
 
   void _navigateToProfile(String userId) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Navigate to profile: $userId')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('Navigate to profile: $userId')));
   }
 }

@@ -28,11 +28,11 @@ class PaginatedChatResponse<T> {
 class ChatApiClient {
   final Dio _dio;
 
-  ChatApiClient({
-    required String baseUrl,
-    Dio? dio,
-  }) : _dio = dio ??
-            Dio(BaseOptions(
+  ChatApiClient({required String baseUrl, Dio? dio})
+    : _dio =
+          dio ??
+          Dio(
+            BaseOptions(
               baseUrl: baseUrl,
               connectTimeout: const Duration(seconds: 10),
               receiveTimeout: const Duration(seconds: 20),
@@ -40,7 +40,8 @@ class ChatApiClient {
                 'Accept': 'application/json',
                 'Content-Type': 'application/json',
               },
-            ));
+            ),
+          );
 
   /// Set authorization token
   void setAuthToken(String token) {
@@ -54,14 +55,10 @@ class ChatApiClient {
 
   /// Get all chat messages for authenticated user (used to build conversations)
   Future<List<MessageDto>> getAllMessages() async {
-    print('[ChatApiClient] getAllMessages called');
     final response = await _dio.get('/api/v1/chat/history');
-    print('[ChatApiClient] getAllMessages response status: ${response.statusCode}');
-    print('[ChatApiClient] getAllMessages raw response: ${response.data}');
     final data = _decodeResponse(response.data);
 
     if (data is List) {
-      print('[ChatApiClient] Response is a List with ${data.length} items');
       return data
           .map((e) => MessageDto.fromJson(e as Map<String, dynamic>))
           .toList();
@@ -69,21 +66,17 @@ class ChatApiClient {
 
     // Handle paginated response
     if (data is Map && data['content'] != null) {
-      print('[ChatApiClient] Response is paginated with ${(data['content'] as List).length} items');
       return (data['content'] as List)
           .map((e) => MessageDto.fromJson(e as Map<String, dynamic>))
           .toList();
     }
 
-    print('[ChatApiClient] Response format not recognized, returning empty list');
     return [];
   }
 
   /// Get connected WebSocket users
   Future<List<String>> getConnectedUsers() async {
-    print('[ChatApiClient] getConnectedUsers called');
     final response = await _dio.get('/api/v1/chat/connected-users');
-    print('[ChatApiClient] getConnectedUsers response status: ${response.statusCode}');
     final data = _decodeResponse(response.data);
 
     if (data is List) {
@@ -99,33 +92,25 @@ class ChatApiClient {
     int page = 0,
     int size = 20,
   }) async {
-    print('[ChatApiClient] getChatHistory called: otherUserId=$otherUserId, page=$page');
     final response = await _dio.get(
       '/api/v1/chat/history/$otherUserId',
       queryParameters: {'page': page, 'size': size},
     );
-    print('[ChatApiClient] getChatHistory response status: ${response.statusCode}');
-    print('[ChatApiClient] getChatHistory raw response: ${response.data}');
     final data = _decodeResponse(response.data);
     return _parsePaginatedResponse(data, MessageDto.fromJson);
   }
 
   /// Send a message
   Future<MessageDto> sendMessage(SendMessageDto request) async {
-    print('[ChatApiClient] sendMessage called: recipientId=${request.recipientId}');
     final response = await _dio.post(
       '/api/v1/chat/send',
       data: request.toJson(),
     );
-    print('[ChatApiClient] sendMessage response status: ${response.statusCode}');
-    print('[ChatApiClient] sendMessage raw response: ${response.data}');
     return MessageDto.fromJson(_decodeResponse(response.data));
   }
 
   /// Mark messages as read
-  /// The request body should contain the message IDs or conversation info to mark as read
   Future<void> markAsRead({String? otherUserId, List<int>? messageIds}) async {
-    print('[ChatApiClient] markAsRead called: otherUserId=$otherUserId, messageIds=$messageIds');
     await _dio.post(
       '/api/v1/chat/read',
       data: {
@@ -140,7 +125,7 @@ class ChatApiClient {
     try {
       await markAsRead(otherUserId: otherUserId);
     } catch (e) {
-      print('[ChatApiClient] markConversationAsRead error: $e');
+      // Silently handle mark as read errors
     }
   }
 
@@ -158,7 +143,8 @@ class ChatApiClient {
     Map<String, dynamic> data,
     T Function(Map<String, dynamic>) fromJson,
   ) {
-    final content = (data['content'] as List<dynamic>?)
+    final content =
+        (data['content'] as List<dynamic>?)
             ?.map((e) => fromJson(e as Map<String, dynamic>))
             .toList() ??
         [];

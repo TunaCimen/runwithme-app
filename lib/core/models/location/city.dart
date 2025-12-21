@@ -26,10 +26,15 @@ class City {
     return City(
       id: (json['id'] as num).toInt(),
       name: json['name'] as String,
-      stateId: (json['stateId'] as num?)?.toInt() ?? (json['state_id'] as num).toInt(),
+      stateId:
+          (json['stateId'] as num?)?.toInt() ??
+          (json['state_id'] as num).toInt(),
       stateCode: json['stateCode'] as String? ?? json['state_code'] as String,
-      countryId: (json['countryId'] as num?)?.toInt() ?? (json['country_id'] as num).toInt(),
-      countryCode: json['countryCode'] as String? ?? json['country_code'] as String,
+      countryId:
+          (json['countryId'] as num?)?.toInt() ??
+          (json['country_id'] as num).toInt(),
+      countryCode:
+          json['countryCode'] as String? ?? json['country_code'] as String,
       latitude: (json['latitude'] as num).toDouble(),
       longitude: (json['longitude'] as num).toDouble(),
       wikiDataId: json['wikiDataId'] as String?,

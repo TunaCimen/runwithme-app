@@ -87,7 +87,8 @@ class ProfileStatsViewModel {
       totalDuration: json['totalDurationSeconds'] != null
           ? Duration(seconds: (json['totalDurationSeconds'] as num).toInt())
           : Duration.zero,
-      averagePaceMinPerKm: (json['averagePaceMinPerKm'] as num?)?.toDouble() ?? 0.0,
+      averagePaceMinPerKm:
+          (json['averagePaceMinPerKm'] as num?)?.toDouble() ?? 0.0,
       totalAwards: (json['totalAwards'] as num?)?.toInt() ?? 0,
       lastRunDate: json['lastRunDate'] != null
           ? DateTime.parse(json['lastRunDate'] as String)

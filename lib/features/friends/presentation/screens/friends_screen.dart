@@ -31,7 +31,9 @@ class _FriendsScreenState extends State<FriendsScreen>
 
     final token = _authService.accessToken;
     final currentUser = _authService.currentUser;
-    debugPrint('[FriendsScreen] initState: token=${token != null ? "present" : "null"}, currentUser=${currentUser?.userId}');
+    debugPrint(
+      '[FriendsScreen] initState: token=${token != null ? "present" : "null"}, currentUser=${currentUser?.userId}',
+    );
     if (token != null) {
       _friendsProvider.setAuthToken(token);
       if (currentUser != null) {
@@ -160,7 +162,8 @@ class _FriendsScreenState extends State<FriendsScreen>
       onRefresh: () => _friendsProvider.loadFriends(refresh: true),
       child: ListView.builder(
         padding: const EdgeInsets.symmetric(vertical: 8),
-        itemCount: _friendsProvider.friends.length +
+        itemCount:
+            _friendsProvider.friends.length +
             (_friendsProvider.friendsHasMore ? 1 : 0),
         itemBuilder: (context, index) {
           if (index >= _friendsProvider.friends.length) {
@@ -207,11 +210,19 @@ class _FriendsScreenState extends State<FriendsScreen>
           displayName: displayName,
           username: username,
           profilePicUrl: profilePicUrl,
-          onTap: () => _navigateToProfile(friendId, displayName: displayName, username: username),
+          onTap: () => _navigateToProfile(
+            friendId,
+            displayName: displayName,
+            username: username,
+          ),
           trailing: [
             IconButton(
               icon: Icon(Icons.message_outlined, color: Colors.grey[600]),
-              onPressed: () => _startChat(friendId, displayName: displayName, profilePicUrl: profilePicUrl),
+              onPressed: () => _startChat(
+                friendId,
+                displayName: displayName,
+                profilePicUrl: profilePicUrl,
+              ),
             ),
           ],
         ),
@@ -245,11 +256,14 @@ class _FriendsScreenState extends State<FriendsScreen>
     );
 
     if (result == true) {
-      final removeResult =
-          await _friendsProvider.removeFriend(friendship.friendshipId);
+      final removeResult = await _friendsProvider.removeFriend(
+        friendship.friendshipId,
+      );
       if (mounted && !removeResult.success) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(removeResult.message ?? 'Failed to remove friend')),
+          SnackBar(
+            content: Text(removeResult.message ?? 'Failed to remove friend'),
+          ),
         );
         return false;
       }
@@ -284,7 +298,8 @@ class _FriendsScreenState extends State<FriendsScreen>
       onRefresh: () => _friendsProvider.loadReceivedRequests(refresh: true),
       child: ListView.builder(
         padding: const EdgeInsets.symmetric(vertical: 8),
-        itemCount: _friendsProvider.receivedRequests.length +
+        itemCount:
+            _friendsProvider.receivedRequests.length +
             (_friendsProvider.receivedRequestsHasMore ? 1 : 0),
         itemBuilder: (context, index) {
           if (index >= _friendsProvider.receivedRequests.length) {
@@ -324,7 +339,9 @@ class _FriendsScreenState extends State<FriendsScreen>
                 ? 'Friend request accepted!'
                 : result.message ?? 'Failed to accept request',
           ),
-          backgroundColor: result.success ? const Color(0xFF7ED321) : Colors.red,
+          backgroundColor: result.success
+              ? const Color(0xFF7ED321)
+              : Colors.red,
         ),
       );
     }
@@ -371,7 +388,8 @@ class _FriendsScreenState extends State<FriendsScreen>
       onRefresh: () => _friendsProvider.loadSentRequests(refresh: true),
       child: ListView.builder(
         padding: const EdgeInsets.symmetric(vertical: 8),
-        itemCount: _friendsProvider.sentRequests.length +
+        itemCount:
+            _friendsProvider.sentRequests.length +
             (_friendsProvider.sentRequestsHasMore ? 1 : 0),
         itemBuilder: (context, index) {
           if (index >= _friendsProvider.sentRequests.length) {
@@ -405,7 +423,9 @@ class _FriendsScreenState extends State<FriendsScreen>
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Cancel Request'),
-        content: const Text('Are you sure you want to cancel this friend request?'),
+        content: const Text(
+          'Are you sure you want to cancel this friend request?',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -460,10 +480,7 @@ class _FriendsScreenState extends State<FriendsScreen>
             const SizedBox(height: 12),
             Text(
               message,
-              style: TextStyle(
-                fontSize: 16,
-                color: Colors.grey[600],
-              ),
+              style: TextStyle(fontSize: 16, color: Colors.grey[600]),
               textAlign: TextAlign.center,
             ),
           ],
@@ -492,10 +509,7 @@ class _FriendsScreenState extends State<FriendsScreen>
             const SizedBox(height: 12),
             Text(
               error,
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey[600],
-              ),
+              style: TextStyle(fontSize: 14, color: Colors.grey[600]),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 24),
@@ -514,19 +528,25 @@ class _FriendsScreenState extends State<FriendsScreen>
     );
   }
 
-  void _navigateToProfile(String userId, {String? username, String? displayName}) {
+  void _navigateToProfile(
+    String userId, {
+    String? username,
+    String? displayName,
+  }) {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => UserProfilePage(
-          userId: userId,
-          username: displayName ?? username,
-        ),
+        builder: (context) =>
+            UserProfilePage(userId: userId, username: displayName ?? username),
       ),
     );
   }
 
-  void _startChat(String friendId, {String? displayName, String? profilePicUrl}) {
+  void _startChat(
+    String friendId, {
+    String? displayName,
+    String? profilePicUrl,
+  }) {
     Navigator.push(
       context,
       MaterialPageRoute(

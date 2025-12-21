@@ -14,10 +14,13 @@ class RouteLike {
   /// Create from JSON - supports both camelCase and snake_case
   factory RouteLike.fromJson(Map<String, dynamic> json) {
     return RouteLike(
-      routeId: (json['routeId'] as num?)?.toInt() ?? (json['route_id'] as num).toInt(),
+      routeId:
+          (json['routeId'] as num?)?.toInt() ??
+          (json['route_id'] as num).toInt(),
       userId: json['userId'] as String? ?? json['user_id'] as String? ?? '',
-      createdAt: DateTime.parse(json['createdAt'] as String? ??
-                                json['created_at'] as String),
+      createdAt: DateTime.parse(
+        json['createdAt'] as String? ?? json['created_at'] as String,
+      ),
     );
   }
 
@@ -31,11 +34,7 @@ class RouteLike {
   }
 
   /// Create a copy with updated fields
-  RouteLike copyWith({
-    int? routeId,
-    String? userId,
-    DateTime? createdAt,
-  }) {
+  RouteLike copyWith({int? routeId, String? userId, DateTime? createdAt}) {
     return RouteLike(
       routeId: routeId ?? this.routeId,
       userId: userId ?? this.userId,

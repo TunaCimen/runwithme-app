@@ -43,13 +43,18 @@ class Country {
       id: (json['id'] as num).toInt(),
       name: json['name'] as String,
       iso3: json['iso3'] as String?,
-      numericCode: json['numericCode'] as String? ?? json['numeric_code'] as String?,
+      numericCode:
+          json['numericCode'] as String? ?? json['numeric_code'] as String?,
       iso2: json['iso2'] as String?,
       capital: json['capital'] as String?,
       region: json['region'] as String?,
-      regionId: (json['regionId'] as num?)?.toInt() ?? (json['region_id'] as num?)?.toInt(),
+      regionId:
+          (json['regionId'] as num?)?.toInt() ??
+          (json['region_id'] as num?)?.toInt(),
       subregion: json['subregion'] as String?,
-      subregionId: (json['subregionId'] as num?)?.toInt() ?? (json['subregion_id'] as num?)?.toInt(),
+      subregionId:
+          (json['subregionId'] as num?)?.toInt() ??
+          (json['subregion_id'] as num?)?.toInt(),
       nationality: json['nationality'] as String?,
       latitude: (json['latitude'] as num?)?.toDouble(),
       longitude: (json['longitude'] as num?)?.toDouble(),

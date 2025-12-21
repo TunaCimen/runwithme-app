@@ -36,14 +36,19 @@ class State {
     return State(
       id: (json['id'] as num).toInt(),
       name: json['name'] as String,
-      countryId: (json['countryId'] as num?)?.toInt() ?? (json['country_id'] as num).toInt(),
-      countryCode: json['countryCode'] as String? ?? json['country_code'] as String,
+      countryId:
+          (json['countryId'] as num?)?.toInt() ??
+          (json['country_id'] as num).toInt(),
+      countryCode:
+          json['countryCode'] as String? ?? json['country_code'] as String,
       fipsCode: json['fipsCode'] as String? ?? json['fips_code'] as String?,
       iso2: json['iso2'] as String?,
       iso31662: json['iso31662'] as String? ?? json['iso3166_2'] as String?,
       type: json['type'] as String?,
       level: (json['level'] as num?)?.toInt(),
-      parentId: (json['parentId'] as num?)?.toInt() ?? (json['parent_id'] as num?)?.toInt(),
+      parentId:
+          (json['parentId'] as num?)?.toInt() ??
+          (json['parent_id'] as num?)?.toInt(),
       latitude: (json['latitude'] as num?)?.toDouble(),
       longitude: (json['longitude'] as num?)?.toDouble(),
       timezone: json['timezone'] as String?,

@@ -4,11 +4,15 @@ import '../data/models/feed_post_dto.dart';
 import '../data/models/comment_dto.dart';
 import '../data/models/create_post_dto.dart';
 import '../../profile/data/profile_repository.dart';
+import '../../map/data/route_repository.dart';
+import '../../run/data/run_repository.dart';
 
 /// Provider for managing feed state
 class FeedProvider extends ChangeNotifier {
   final FeedRepository _repository;
   final ProfileRepository _profileRepository;
+  final RouteRepository _routeRepository;
+  final RunRepository _runRepository;
 
   // Feed state
   List<FeedPostDto> _feedPosts = [];
@@ -40,8 +44,12 @@ class FeedProvider extends ChangeNotifier {
     String baseUrl = 'http://35.158.35.102:8080',
     FeedRepository? repository,
     ProfileRepository? profileRepository,
+    RouteRepository? routeRepository,
+    RunRepository? runRepository,
   }) : _repository = repository ?? FeedRepository(baseUrl: baseUrl),
-       _profileRepository = profileRepository ?? ProfileRepository();
+       _profileRepository = profileRepository ?? ProfileRepository(),
+       _routeRepository = routeRepository ?? RouteRepository(),
+       _runRepository = runRepository ?? RunRepository();
 
   // Getters
   List<FeedPostDto> get feedPosts => _feedPosts;
@@ -80,8 +88,12 @@ class FeedProvider extends ChangeNotifier {
     final result = await _repository.getFeed(page: _feedPage);
 
     if (result.success && result.data != null) {
-      // Enrich posts with author info
-      final enrichedPosts = await _enrichPostsWithAuthorInfo(result.data!.content);
+      // Enrich posts with author info, counts, and route data
+      var enrichedPosts = await _enrichPostsWithAuthorInfo(
+        result.data!.content,
+      );
+      enrichedPosts = await _enrichPostsWithCounts(enrichedPosts);
+      enrichedPosts = await _enrichPostsWithRouteInfo(enrichedPosts);
 
       if (refresh) {
         _feedPosts = enrichedPosts;
@@ -100,7 +112,9 @@ class FeedProvider extends ChangeNotifier {
   }
 
   /// Enrich posts with author information from profile repository
-  Future<List<FeedPostDto>> _enrichPostsWithAuthorInfo(List<FeedPostDto> posts) async {
+  Future<List<FeedPostDto>> _enrichPostsWithAuthorInfo(
+    List<FeedPostDto> posts,
+  ) async {
     if (_authToken == null) return posts;
 
     // Collect unique author IDs that need fetching
@@ -136,7 +150,6 @@ class FeedProvider extends ChangeNotifier {
         }
       } catch (e) {
         // Ignore errors for individual profile fetches
-        print('[FeedProvider] Failed to fetch profile for $authorId: $e');
       }
     }
 
@@ -153,6 +166,142 @@ class FeedProvider extends ChangeNotifier {
       }
       return post;
     }).toList();
+  }
+
+  /// Enrich posts with like/comment counts from separate API endpoints
+  Future<List<FeedPostDto>> _enrichPostsWithCounts(
+    List<FeedPostDto> posts,
+  ) async {
+    final enrichedPosts = <FeedPostDto>[];
+
+    // Fetch counts in parallel for all posts
+    final futures = posts.map((post) async {
+      try {
+        // Fetch like and comment counts in parallel for each post
+        final results = await Future.wait([
+          _repository.getLikeCount(post.id),
+          _repository.getCommentCount(post.id),
+          _repository.checkIfLiked(post.id),
+        ]);
+
+        final likeCount = results[0].success
+            ? (results[0].data as int? ?? 0)
+            : post.likesCount;
+        final commentCount = results[1].success
+            ? (results[1].data as int? ?? 0)
+            : post.commentsCount;
+        final isLiked = results[2].success
+            ? (results[2].data as bool? ?? false)
+            : post.isLikedByCurrentUser;
+
+        return post.copyWith(
+          likesCount: likeCount,
+          commentsCount: commentCount,
+          isLikedByCurrentUser: isLiked,
+        );
+      } catch (e) {
+        // Silently fail - use existing values
+        return post;
+      }
+    }).toList();
+
+    final results = await Future.wait(futures);
+    enrichedPosts.addAll(results);
+
+    return enrichedPosts;
+  }
+
+  /// Enrich posts with route/run coordinate data for map display
+  Future<List<FeedPostDto>> _enrichPostsWithRouteInfo(
+    List<FeedPostDto> posts,
+  ) async {
+    if (_authToken == null) {
+      return posts;
+    }
+
+    final enrichedPosts = <FeedPostDto>[];
+
+    for (final post in posts) {
+      // Skip if post already has route points or isn't a route/run post
+      if (post.routePoints != null && post.routePoints!.isNotEmpty) {
+        enrichedPosts.add(post);
+        continue;
+      }
+
+      // Check if post has route or run that needs coordinate data
+      if (post.postType == PostType.route && post.routeId != null) {
+        try {
+          final routeResult = await _routeRepository.getRouteById(
+            routeId: post.routeId!,
+            accessToken: _authToken,
+          );
+          if (routeResult.success && routeResult.route != null) {
+            final route = routeResult.route!;
+            enrichedPosts.add(
+              post.copyWith(
+                startPointLat: route.startPointLat,
+                startPointLon: route.startPointLon,
+                endPointLat: route.endPointLat,
+                endPointLon: route.endPointLon,
+                routePoints: route.points
+                    .map(
+                      (p) => <String, double>{
+                        'latitude': p.latitude,
+                        'longitude': p.longitude,
+                      },
+                    )
+                    .toList(),
+                routeDistanceM: route.distanceM,
+                routeDurationS: route.estimatedDurationS,
+                routeTitle: route.title,
+              ),
+            );
+            continue;
+          }
+        } catch (e) {
+          // Silently fail - post will be added without enrichment
+        }
+      } else if (post.postType == PostType.run && post.runSessionId != null) {
+        try {
+          final runResult = await _runRepository.getRunSession(
+            post.runSessionId!,
+            accessToken: _authToken,
+          );
+          if (runResult.success && runResult.data != null) {
+            final run = runResult.data!;
+            if (run.points.isNotEmpty) {
+              enrichedPosts.add(
+                post.copyWith(
+                  startPointLat: run.points.first.latitude,
+                  startPointLon: run.points.first.longitude,
+                  endPointLat: run.points.last.latitude,
+                  endPointLon: run.points.last.longitude,
+                  routePoints: run.points
+                      .map(
+                        (p) => <String, double>{
+                          'latitude': p.latitude,
+                          'longitude': p.longitude,
+                        },
+                      )
+                      .toList(),
+                  runDistanceM: run.totalDistanceM,
+                  runDurationS: run.movingTimeS,
+                  runPaceSecPerKm: run.avgPaceSecPerKm,
+                ),
+              );
+              continue;
+            }
+          }
+        } catch (e) {
+          // Silently fail - post will be added without enrichment
+        }
+      }
+
+      // Add post without enrichment if fetch failed
+      enrichedPosts.add(post);
+    }
+
+    return enrichedPosts;
   }
 
   /// Load more feed posts (pagination)
@@ -275,7 +424,9 @@ class FeedProvider extends ChangeNotifier {
 
     if (result.success && result.data != null) {
       // Enrich comments with author info
-      final enrichedComments = await _enrichCommentsWithAuthorInfo(result.data!.content);
+      final enrichedComments = await _enrichCommentsWithAuthorInfo(
+        result.data!.content,
+      );
 
       if (refresh || _postComments[postId] == null) {
         _postComments[postId] = enrichedComments;
@@ -294,7 +445,9 @@ class FeedProvider extends ChangeNotifier {
   }
 
   /// Enrich comments with author information from profile repository
-  Future<List<CommentDto>> _enrichCommentsWithAuthorInfo(List<CommentDto> comments) async {
+  Future<List<CommentDto>> _enrichCommentsWithAuthorInfo(
+    List<CommentDto> comments,
+  ) async {
     if (_authToken == null) return comments;
 
     // Collect unique user IDs that need fetching
@@ -328,7 +481,7 @@ class FeedProvider extends ChangeNotifier {
           };
         }
       } catch (e) {
-        print('[FeedProvider] Failed to fetch profile for comment user $userId: $e');
+        // Ignore errors for individual profile fetches
       }
     }
 
@@ -364,10 +517,7 @@ class FeedProvider extends ChangeNotifier {
 
     if (result.success && result.data != null) {
       // Add new comment to the list
-      _postComments[postId] = [
-        result.data!,
-        ...(_postComments[postId] ?? []),
-      ];
+      _postComments[postId] = [result.data!, ...(_postComments[postId] ?? [])];
 
       // Update comment count in the post
       final index = _feedPosts.indexWhere((p) => p.id == postId);

@@ -10,6 +10,7 @@ import '../../../core/models/route_point.dart';
 import '../../auth/data/auth_service.dart';
 import '../data/route_repository.dart';
 import '../data/route_naming_service.dart';
+import 'route_navigation_page.dart';
 
 // Type alias to avoid conflict with Flutter's Route
 typedef RunRoute = route_model.Route;
@@ -131,15 +132,15 @@ class _MapPageState extends State<MapPage> {
         Uri.parse(
           'https://nominatim.openstreetmap.org/search?q=${Uri.encodeComponent(query)}&format=json&limit=5',
         ),
-        headers: {
-          'User-Agent': 'RunWithMeApp/1.0',
-        },
+        headers: {'User-Agent': 'RunWithMeApp/1.0'},
       );
 
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
         final suggestions = data
-            .map((json) => SearchSuggestion.fromJson(json as Map<String, dynamic>))
+            .map(
+              (json) => SearchSuggestion.fromJson(json as Map<String, dynamic>),
+            )
             .toList();
 
         if (mounted) {
@@ -219,7 +220,11 @@ class _MapPageState extends State<MapPage> {
 
   /// Load routes at a specific location
   /// Set [forceRefresh] to true to bypass cache (e.g., on pull-to-refresh)
-  Future<void> _loadRoutesAtLocation(double lat, double lon, {bool forceRefresh = false}) async {
+  Future<void> _loadRoutesAtLocation(
+    double lat,
+    double lon, {
+    bool forceRefresh = false,
+  }) async {
     setState(() {
       _isLoading = true;
     });
@@ -279,31 +284,47 @@ class _MapPageState extends State<MapPage> {
   /// Load nearby routes based on current center
   /// Set [forceRefresh] to true to bypass cache (e.g., on manual refresh button)
   Future<void> _loadNearbyRoutes({bool forceRefresh = false}) async {
-    await _loadRoutesAtLocation(_currentCenter.latitude, _currentCenter.longitude, forceRefresh: forceRefresh);
+    await _loadRoutesAtLocation(
+      _currentCenter.latitude,
+      _currentCenter.longitude,
+      forceRefresh: forceRefresh,
+    );
   }
 
   /// Load all like statuses in parallel (batched)
-  Future<void> _loadAllRouteLikeStatuses(List<RunRoute> routes, {bool forceRefresh = false}) async {
+  Future<void> _loadAllRouteLikeStatuses(
+    List<RunRoute> routes, {
+    bool forceRefresh = false,
+  }) async {
     if (_authService.accessToken == null || routes.isEmpty) return;
 
     final stopwatch = Stopwatch()..start();
     const batchSize = 10;
 
     for (var i = 0; i < routes.length; i += batchSize) {
-      final batchEnd = (i + batchSize < routes.length) ? i + batchSize : routes.length;
+      final batchEnd = (i + batchSize < routes.length)
+          ? i + batchSize
+          : routes.length;
       final batch = routes.sublist(i, batchEnd);
 
       await Future.wait(
-        batch.map((route) => _loadRouteLikeStatus(route.id, forceRefresh: forceRefresh)),
+        batch.map(
+          (route) => _loadRouteLikeStatus(route.id, forceRefresh: forceRefresh),
+        ),
       );
     }
 
     stopwatch.stop();
-    debugPrint('[MapPage] Loaded like statuses for ${routes.length} routes in ${stopwatch.elapsedMilliseconds}ms');
+    debugPrint(
+      '[MapPage] Loaded like statuses for ${routes.length} routes in ${stopwatch.elapsedMilliseconds}ms',
+    );
   }
 
   /// Load like status and count for a route
-  Future<void> _loadRouteLikeStatus(int routeId, {bool forceRefresh = false}) async {
+  Future<void> _loadRouteLikeStatus(
+    int routeId, {
+    bool forceRefresh = false,
+  }) async {
     if (_authService.accessToken == null) return;
 
     try {
@@ -368,7 +389,10 @@ class _MapPageState extends State<MapPage> {
   }
 
   /// Set a point and fetch its location name via reverse geocoding
-  Future<void> _setPointWithReverseGeocode(LatLng point, String pointType) async {
+  Future<void> _setPointWithReverseGeocode(
+    LatLng point,
+    String pointType,
+  ) async {
     // Set point immediately with loading placeholder
     setState(() {
       if (pointType == 'start') {
@@ -431,7 +455,8 @@ class _MapPageState extends State<MapPage> {
 
       // Use OSRM (Open Source Routing Machine) for foot routing
       // continue_straight=true prevents waypoint reordering
-      final url = 'https://routing.openstreetmap.de/routed-foot/route/v1/driving/'
+      final url =
+          'https://routing.openstreetmap.de/routed-foot/route/v1/driving/'
           '$coordinates'
           '?overview=full&geometries=geojson&steps=true&continue_straight=true';
 
@@ -443,7 +468,9 @@ class _MapPageState extends State<MapPage> {
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
 
-        if (data['code'] == 'Ok' && data['routes'] != null && data['routes'].isNotEmpty) {
+        if (data['code'] == 'Ok' &&
+            data['routes'] != null &&
+            data['routes'].isNotEmpty) {
           final route = data['routes'][0];
           final coordinates = route['geometry']['coordinates'] as List;
           final distance = route['distance'] as num; // in meters
@@ -466,7 +493,10 @@ class _MapPageState extends State<MapPage> {
           final startName = _pointAName ?? 'Start';
           final endName = _pointBName ?? 'End';
           // If both names are the same, use "Route in X" format
-          final routeTitle = (startName == endName || startName == 'Unknown Location' || endName == 'Unknown Location')
+          final routeTitle =
+              (startName == endName ||
+                  startName == 'Unknown Location' ||
+                  endName == 'Unknown Location')
               ? 'Route in ${startName != 'Unknown Location' ? startName : endName}'
               : '$startName - $endName';
 
@@ -495,7 +525,11 @@ class _MapPageState extends State<MapPage> {
           // Show success message
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Route generated! Tap the save button to add it to your routes.')),
+              const SnackBar(
+                content: Text(
+                  'Route generated! Tap the save button to add it to your routes.',
+                ),
+              ),
             );
           }
         } else {
@@ -510,9 +544,9 @@ class _MapPageState extends State<MapPage> {
       });
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to generate route: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to generate route: $e')));
       }
     }
   }
@@ -606,7 +640,8 @@ class _MapPageState extends State<MapPage> {
     // Optimistic update
     setState(() {
       _likedRoutes[route.id] = !isCurrentlyLiked;
-      _likeCounts[route.id] = (_likeCounts[route.id] ?? 0) + (isCurrentlyLiked ? -1 : 1);
+      _likeCounts[route.id] =
+          (_likeCounts[route.id] ?? 0) + (isCurrentlyLiked ? -1 : 1);
     });
 
     final result = isCurrentlyLiked
@@ -623,7 +658,8 @@ class _MapPageState extends State<MapPage> {
       // Revert on failure
       setState(() {
         _likedRoutes[route.id] = isCurrentlyLiked;
-        _likeCounts[route.id] = (_likeCounts[route.id] ?? 0) + (isCurrentlyLiked ? 1 : -1);
+        _likeCounts[route.id] =
+            (_likeCounts[route.id] ?? 0) + (isCurrentlyLiked ? 1 : -1);
       });
 
       if (mounted) {
@@ -641,10 +677,7 @@ class _MapPageState extends State<MapPage> {
     });
 
     // Center map on route
-    _mapController.move(
-      LatLng(route.startPointLat, route.startPointLon),
-      15.0,
-    );
+    _mapController.move(LatLng(route.startPointLat, route.startPointLon), 15.0);
 
     // Show route details bottom sheet
     _showRouteDetails(route);
@@ -712,27 +745,58 @@ class _MapPageState extends State<MapPage> {
                       const SizedBox(height: 20),
                     ],
 
-                    // Like button
+                    // Navigate Route button
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton.icon(
+                        onPressed: () {
+                          Navigator.pop(context); // Close bottom sheet
+                          _navigateRoute(route);
+                        },
+                        icon: const Icon(Icons.navigation),
+                        label: const Text('Navigate Route'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF7ED321),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Like button
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
                         onPressed: () => _toggleLike(route),
                         icon: Icon(
                           _likedRoutes[route.id] == true
                               ? Icons.favorite
                               : Icons.favorite_border,
+                          color: _likedRoutes[route.id] == true
+                              ? Colors.red
+                              : Colors.grey[700],
                         ),
                         label: Text(
                           _likedRoutes[route.id] == true
                               ? 'Unlike (${_likeCounts[route.id] ?? 0})'
                               : 'Like Route (${_likeCounts[route.id] ?? 0})',
+                          style: TextStyle(
+                            color: _likedRoutes[route.id] == true
+                                ? Colors.red
+                                : Colors.grey[700],
+                          ),
                         ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: _likedRoutes[route.id] == true
-                              ? Colors.red
-                              : const Color(0xFF7ED321),
-                          foregroundColor: Colors.white,
+                        style: OutlinedButton.styleFrom(
                           padding: const EdgeInsets.symmetric(vertical: 16),
+                          side: BorderSide(
+                            color: _likedRoutes[route.id] == true
+                                ? Colors.red
+                                : Colors.grey[400]!,
+                          ),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
                           ),
@@ -754,12 +818,65 @@ class _MapPageState extends State<MapPage> {
       children: [
         Icon(icon, size: 16, color: Colors.grey[600]),
         const SizedBox(width: 4),
-        Text(
-          value,
-          style: TextStyle(color: Colors.grey[700]),
-        ),
+        Text(value, style: TextStyle(color: Colors.grey[700])),
       ],
     );
+  }
+
+  /// Navigate to route navigation page
+  void _navigateRoute(RunRoute route) async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => RouteNavigationPage(route: route),
+      ),
+    );
+
+    // If a run session was completed, show a success message
+    if (result != null && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Run completed and saved!'),
+          backgroundColor: Color(0xFF7ED321),
+        ),
+      );
+    }
+  }
+
+  /// Start a run with the generated route (without saving the route first)
+  void _startRunWithRoute(RunRoute route) async {
+    // Exit creation mode
+    setState(() {
+      _isCreatingRoute = false;
+      _pointA = null;
+      _pointB = null;
+      _waypoints = [];
+      _waypointNames = [];
+      _generatedRoute = null;
+      _pickingPointType = null;
+      _pointAName = null;
+      _pointBName = null;
+    });
+
+    // Navigate to route navigation page
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => RouteNavigationPage(route: route),
+      ),
+    );
+
+    // If a run session was completed, show a success message
+    if (result != null && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Run completed and saved!'),
+          backgroundColor: Color(0xFF7ED321),
+        ),
+      );
+      // Refresh nearby routes
+      await _loadNearbyRoutes(forceRefresh: true);
+    }
   }
 
   /// Build Google Maps-style route creation view
@@ -834,12 +951,19 @@ class _MapPageState extends State<MapPage> {
                     children: [
                       const Divider(height: 1),
                       _buildPointRow(
-                        label: String.fromCharCode(67 + entry.key), // C, D, E, etc.
+                        label: String.fromCharCode(
+                          67 + entry.key,
+                        ), // C, D, E, etc.
                         hint: 'Stop ${entry.key + 1}',
                         icon: Icons.add_location,
                         value: entry.value,
-                        displayName: entry.key < _waypointNames.length ? _waypointNames[entry.key] : null,
-                        onTap: () => _showPointSelectionOptions(isStartPoint: false, isWaypoint: true),
+                        displayName: entry.key < _waypointNames.length
+                            ? _waypointNames[entry.key]
+                            : null,
+                        onTap: () => _showPointSelectionOptions(
+                          isStartPoint: false,
+                          isWaypoint: true,
+                        ),
                         onClear: () {
                           setState(() {
                             _waypoints.removeAt(entry.key);
@@ -865,7 +989,10 @@ class _MapPageState extends State<MapPage> {
                           child: Icon(Icons.add, color: Colors.black87),
                         ),
                         title: const Text('Add stop'),
-                        onTap: () => _showPointSelectionOptions(isStartPoint: false, isWaypoint: true),
+                        onTap: () => _showPointSelectionOptions(
+                          isStartPoint: false,
+                          isWaypoint: true,
+                        ),
                       ),
                     ],
                   ),
@@ -957,7 +1084,11 @@ class _MapPageState extends State<MapPage> {
                             ],
                           ),
                           child: const Center(
-                            child: Icon(Icons.person, color: Colors.white, size: 16),
+                            child: Icon(
+                              Icons.person,
+                              color: Colors.white,
+                              size: 16,
+                            ),
                           ),
                         ),
                       ),
@@ -1048,9 +1179,7 @@ class _MapPageState extends State<MapPage> {
           if (_isGeneratingRoute)
             Container(
               color: Colors.black26,
-              child: const Center(
-                child: CircularProgressIndicator(),
-              ),
+              child: const Center(child: CircularProgressIndicator()),
             ),
         ],
       ),
@@ -1082,7 +1211,8 @@ class _MapPageState extends State<MapPage> {
       ),
       title: Text(
         value != null
-            ? (displayName ?? '${value.latitude.toStringAsFixed(4)}, ${value.longitude.toStringAsFixed(4)}')
+            ? (displayName ??
+                  '${value.latitude.toStringAsFixed(4)}, ${value.longitude.toStringAsFixed(4)}')
             : hint,
         style: TextStyle(
           color: value != null ? Colors.black87 : Colors.grey[600],
@@ -1090,10 +1220,7 @@ class _MapPageState extends State<MapPage> {
         ),
       ),
       trailing: value != null
-          ? IconButton(
-              icon: const Icon(Icons.close),
-              onPressed: onClear,
-            )
+          ? IconButton(icon: const Icon(Icons.close), onPressed: onClear)
           : const Icon(Icons.search),
       onTap: onTap,
     );
@@ -1165,64 +1292,71 @@ class _MapPageState extends State<MapPage> {
                     child: _isSearching
                         ? const Center(child: CircularProgressIndicator())
                         : _searchSuggestions.isEmpty
-                            ? Center(
-                                child: Text(
-                                  'Search for a location',
-                                  style: TextStyle(color: Colors.grey[600]),
+                        ? Center(
+                            child: Text(
+                              'Search for a location',
+                              style: TextStyle(color: Colors.grey[600]),
+                            ),
+                          )
+                        : ListView.builder(
+                            controller: scrollController,
+                            itemCount: _searchSuggestions.length,
+                            itemBuilder: (context, index) {
+                              final suggestion = _searchSuggestions[index];
+                              return ListTile(
+                                leading: const Icon(Icons.location_on),
+                                title: Text(
+                                  suggestion.displayName.split(',').first,
                                 ),
-                              )
-                            : ListView.builder(
-                                controller: scrollController,
-                                itemCount: _searchSuggestions.length,
-                                itemBuilder: (context, index) {
-                                  final suggestion = _searchSuggestions[index];
-                                  return ListTile(
-                                    leading: const Icon(Icons.location_on),
-                                    title: Text(
-                                      suggestion.displayName.split(',').first,
-                                    ),
-                                    subtitle: Text(
-                                      suggestion.displayName,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    onTap: () {
-                                      Navigator.pop(context);
-                                      final point = LatLng(suggestion.lat, suggestion.lon);
-                                      final locationName = suggestion.displayName.split(',').first.trim();
-
-                                      setState(() {
-                                        if (isStartPoint) {
-                                          _pointA = point;
-                                          _pointAName = locationName;
-                                        } else if (isWaypoint) {
-                                          // When adding a waypoint, the current endpoint becomes a waypoint
-                                          // and the new point becomes the new endpoint
-                                          if (_pointB != null && _pointBName != null) {
-                                            _waypoints.add(_pointB!);
-                                            _waypointNames.add(_pointBName!);
-                                          }
-                                          _pointB = point;
-                                          _pointBName = locationName;
-                                        } else {
-                                          _pointB = point;
-                                          _pointBName = locationName;
-                                        }
-                                        _searchController.clear();
-                                        _searchSuggestions = [];
-                                      });
-
-                                      // Move map to selected location
-                                      _mapController.move(point, 14.0);
-
-                                      // Generate route if both points are set
-                                      if (_pointA != null && _pointB != null) {
-                                        _generateRoute();
-                                      }
-                                    },
+                                subtitle: Text(
+                                  suggestion.displayName,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                onTap: () {
+                                  Navigator.pop(context);
+                                  final point = LatLng(
+                                    suggestion.lat,
+                                    suggestion.lon,
                                   );
+                                  final locationName = suggestion.displayName
+                                      .split(',')
+                                      .first
+                                      .trim();
+
+                                  setState(() {
+                                    if (isStartPoint) {
+                                      _pointA = point;
+                                      _pointAName = locationName;
+                                    } else if (isWaypoint) {
+                                      // When adding a waypoint, the current endpoint becomes a waypoint
+                                      // and the new point becomes the new endpoint
+                                      if (_pointB != null &&
+                                          _pointBName != null) {
+                                        _waypoints.add(_pointB!);
+                                        _waypointNames.add(_pointBName!);
+                                      }
+                                      _pointB = point;
+                                      _pointBName = locationName;
+                                    } else {
+                                      _pointB = point;
+                                      _pointBName = locationName;
+                                    }
+                                    _searchController.clear();
+                                    _searchSuggestions = [];
+                                  });
+
+                                  // Move map to selected location
+                                  _mapController.move(point, 14.0);
+
+                                  // Generate route if both points are set
+                                  if (_pointA != null && _pointB != null) {
+                                    _generateRoute();
+                                  }
                                 },
-                              ),
+                              );
+                            },
+                          ),
                   ),
                 ],
               ),
@@ -1248,7 +1382,10 @@ class _MapPageState extends State<MapPage> {
             children: [
               if (isStartPoint) ...[
                 ListTile(
-                  leading: const Icon(Icons.my_location, color: Color(0xFF7ED321)),
+                  leading: const Icon(
+                    Icons.my_location,
+                    color: Color(0xFF7ED321),
+                  ),
                   title: const Text('Use Your Location'),
                   onTap: () {
                     Navigator.pop(context);
@@ -1272,7 +1409,10 @@ class _MapPageState extends State<MapPage> {
                 title: const Text('Pick on Map'),
                 onTap: () {
                   Navigator.pop(context);
-                  _pickOnMap(isStartPoint: isStartPoint, isWaypoint: isWaypoint);
+                  _pickOnMap(
+                    isStartPoint: isStartPoint,
+                    isWaypoint: isWaypoint,
+                  );
                 },
               ),
             ],
@@ -1301,7 +1441,9 @@ class _MapPageState extends State<MapPage> {
       _mapController.move(currentLocation, 14.0);
 
       // Fetch location name via reverse geocoding
-      final locationName = await RouteNamingService.getLocationDisplayName(currentLocation);
+      final locationName = await RouteNamingService.getLocationDisplayName(
+        currentLocation,
+      );
       if (mounted) {
         setState(() {
           _pointAName = locationName;
@@ -1316,9 +1458,9 @@ class _MapPageState extends State<MapPage> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to get location: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to get location: $e')));
       }
     }
   }
@@ -1336,7 +1478,9 @@ class _MapPageState extends State<MapPage> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Location services are disabled. Please enable them in settings.'),
+              content: Text(
+                'Location services are disabled. Please enable them in settings.',
+              ),
               duration: Duration(seconds: 3),
             ),
           );
@@ -1355,7 +1499,9 @@ class _MapPageState extends State<MapPage> {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
-                content: Text('Location permission denied. Please grant permission to use this feature.'),
+                content: Text(
+                  'Location permission denied. Please grant permission to use this feature.',
+                ),
                 duration: Duration(seconds: 3),
               ),
             );
@@ -1371,7 +1517,9 @@ class _MapPageState extends State<MapPage> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Location permission permanently denied. Please enable it in app settings.'),
+              content: Text(
+                'Location permission permanently denied. Please enable it in app settings.',
+              ),
               duration: Duration(seconds: 3),
             ),
           );
@@ -1399,9 +1547,9 @@ class _MapPageState extends State<MapPage> {
     } catch (e) {
       debugPrint('[MapPage] Error getting location: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to get location: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to get location: $e')));
       }
       setState(() {
         _isLoadingLocation = false;
@@ -1430,7 +1578,11 @@ class _MapPageState extends State<MapPage> {
   /// Pick point on map
   void _pickOnMap({required bool isStartPoint, bool isWaypoint = false}) {
     setState(() {
-      _pickingPointType = isStartPoint ? 'start' : isWaypoint ? 'waypoint' : 'end';
+      _pickingPointType = isStartPoint
+          ? 'start'
+          : isWaypoint
+          ? 'waypoint'
+          : 'end';
     });
 
     ScaffoldMessenger.of(context).showSnackBar(
@@ -1439,8 +1591,8 @@ class _MapPageState extends State<MapPage> {
           isStartPoint
               ? 'Tap on the map to set start point'
               : isWaypoint
-                  ? 'Tap on the map to add waypoint'
-                  : 'Tap on the map to set destination',
+              ? 'Tap on the map to add waypoint'
+              : 'Tap on the map to set destination',
         ),
         duration: const Duration(seconds: 3),
       ),
@@ -1486,7 +1638,9 @@ class _MapPageState extends State<MapPage> {
                     final route = entry.value;
                     // Use route points if available, otherwise draw line from start to end
                     final points = route.points.isNotEmpty
-                        ? route.points.map((p) => LatLng(p.latitude, p.longitude)).toList()
+                        ? route.points
+                              .map((p) => LatLng(p.latitude, p.longitude))
+                              .toList()
                         : [
                             LatLng(route.startPointLat, route.startPointLon),
                             LatLng(route.endPointLat, route.endPointLon),
@@ -1506,7 +1660,9 @@ class _MapPageState extends State<MapPage> {
                 PolylineLayer(
                   polylines: [
                     Polyline(
-                      points: _generatedRoute!.points.map((p) => LatLng(p.latitude, p.longitude)).toList(),
+                      points: _generatedRoute!.points
+                          .map((p) => LatLng(p.latitude, p.longitude))
+                          .toList(),
                       strokeWidth: 5.0,
                       color: const Color(0xFF7ED321),
                     ),
@@ -1535,7 +1691,11 @@ class _MapPageState extends State<MapPage> {
                           ],
                         ),
                         child: const Center(
-                          child: Icon(Icons.person, color: Colors.white, size: 16),
+                          child: Icon(
+                            Icons.person,
+                            color: Colors.white,
+                            size: 16,
+                          ),
                         ),
                       ),
                     ),
@@ -1560,7 +1720,11 @@ class _MapPageState extends State<MapPage> {
                               shape: BoxShape.circle,
                               border: Border.all(color: Colors.white, width: 2),
                             ),
-                            child: const Icon(Icons.play_arrow, color: Colors.white, size: 16),
+                            child: const Icon(
+                              Icons.play_arrow,
+                              color: Colors.white,
+                              size: 16,
+                            ),
                           ),
                         ),
                       ),
@@ -1577,7 +1741,11 @@ class _MapPageState extends State<MapPage> {
                               shape: BoxShape.circle,
                               border: Border.all(color: Colors.white, width: 2),
                             ),
-                            child: const Icon(Icons.stop, color: Colors.white, size: 16),
+                            child: const Icon(
+                              Icons.stop,
+                              color: Colors.white,
+                              size: 16,
+                            ),
                           ),
                         ),
                       ),
@@ -1690,7 +1858,10 @@ class _MapPageState extends State<MapPage> {
                       children: [
                         // Search input
                         Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 4,
+                          ),
                           child: Row(
                             children: [
                               Icon(Icons.search, color: Colors.grey[400]),
@@ -1702,7 +1873,9 @@ class _MapPageState extends State<MapPage> {
                                   decoration: InputDecoration(
                                     hintText: 'Search for a place...',
                                     border: InputBorder.none,
-                                    hintStyle: TextStyle(color: Colors.grey[400]),
+                                    hintStyle: TextStyle(
+                                      color: Colors.grey[400],
+                                    ),
                                   ),
                                 ),
                               ),
@@ -1710,7 +1883,9 @@ class _MapPageState extends State<MapPage> {
                                 const SizedBox(
                                   width: 20,
                                   height: 20,
-                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
                                 )
                               else if (_searchController.text.isNotEmpty)
                                 IconButton(
@@ -1741,14 +1916,18 @@ class _MapPageState extends State<MapPage> {
                               itemBuilder: (context, index) {
                                 final suggestion = _searchSuggestions[index];
                                 return ListTile(
-                                  leading: const Icon(Icons.location_on, size: 20),
+                                  leading: const Icon(
+                                    Icons.location_on,
+                                    size: 20,
+                                  ),
                                   title: Text(
                                     suggestion.displayName,
                                     style: const TextStyle(fontSize: 14),
                                     maxLines: 2,
                                     overflow: TextOverflow.ellipsis,
                                   ),
-                                  onTap: () => _selectSearchSuggestion(suggestion),
+                                  onTap: () =>
+                                      _selectSearchSuggestion(suggestion),
                                 );
                               },
                             ),
@@ -1771,7 +1950,9 @@ class _MapPageState extends State<MapPage> {
                   // Create Route button
                   FloatingActionButton.small(
                     heroTag: 'create_route',
-                    backgroundColor: _isCreatingRoute ? const Color(0xFF7ED321) : Colors.white,
+                    backgroundColor: _isCreatingRoute
+                        ? const Color(0xFF7ED321)
+                        : Colors.white,
                     onPressed: _toggleCreateMode,
                     child: Icon(
                       _isCreatingRoute ? Icons.close : Icons.add_road,
@@ -1866,13 +2047,25 @@ class _MapPageState extends State<MapPage> {
                                     const SizedBox(height: 8),
                                     Row(
                                       children: [
-                                        Icon(Icons.straighten, size: 16, color: Colors.grey[600]),
+                                        Icon(
+                                          Icons.straighten,
+                                          size: 16,
+                                          color: Colors.grey[600],
+                                        ),
                                         const SizedBox(width: 4),
-                                        Text(_generatedRoute!.formattedDistance),
+                                        Text(
+                                          _generatedRoute!.formattedDistance,
+                                        ),
                                         const SizedBox(width: 16),
-                                        Icon(Icons.timer, size: 16, color: Colors.grey[600]),
+                                        Icon(
+                                          Icons.timer,
+                                          size: 16,
+                                          color: Colors.grey[600],
+                                        ),
                                         const SizedBox(width: 4),
-                                        Text(_generatedRoute!.formattedDuration),
+                                        Text(
+                                          _generatedRoute!.formattedDuration,
+                                        ),
                                       ],
                                     ),
                                   ],
@@ -1881,27 +2074,64 @@ class _MapPageState extends State<MapPage> {
                             ],
                           ),
                           const SizedBox(height: 16),
-                          SizedBox(
-                            width: double.infinity,
-                            child: ElevatedButton.icon(
-                              onPressed: _isLoading ? null : _saveGeneratedRoute,
-                              icon: _isLoading
-                                  ? const SizedBox(
-                                      width: 20,
-                                      height: 20,
-                                      child: CircularProgressIndicator(strokeWidth: 2),
-                                    )
-                                  : const Icon(Icons.save),
-                              label: Text(_isLoading ? 'Saving...' : 'Save Route'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF7ED321),
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(vertical: 16),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
+                          Row(
+                            children: [
+                              // Save Route button
+                              Expanded(
+                                child: OutlinedButton.icon(
+                                  onPressed: _isLoading
+                                      ? null
+                                      : _saveGeneratedRoute,
+                                  icon: _isLoading
+                                      ? const SizedBox(
+                                          width: 20,
+                                          height: 20,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                          ),
+                                        )
+                                      : const Icon(Icons.save),
+                                  label: Text(
+                                    _isLoading ? 'Saving...' : 'Save',
+                                  ),
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: const Color(0xFF7ED321),
+                                    side: const BorderSide(
+                                      color: Color(0xFF7ED321),
+                                    ),
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 16,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
                                 ),
                               ),
-                            ),
+                              const SizedBox(width: 12),
+                              // Start Run button
+                              Expanded(
+                                child: ElevatedButton.icon(
+                                  onPressed: _isLoading
+                                      ? null
+                                      : () => _startRunWithRoute(
+                                          _generatedRoute!,
+                                        ),
+                                  icon: const Icon(Icons.directions_run),
+                                  label: const Text('Start Run'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFF7ED321),
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 16,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       )
@@ -1912,8 +2142,8 @@ class _MapPageState extends State<MapPage> {
                             _pointA == null
                                 ? Icons.looks_one
                                 : _pointB == null
-                                    ? Icons.looks_two
-                                    : Icons.add_location,
+                                ? Icons.looks_two
+                                : Icons.add_location,
                             size: 40,
                             color: const Color(0xFF7ED321),
                           ),
@@ -1922,8 +2152,8 @@ class _MapPageState extends State<MapPage> {
                             _pointA == null
                                 ? 'Search or tap on the map\nto set start point (A)'
                                 : _pointB == null
-                                    ? 'Search or tap on the map\nto set end point (B)'
-                                    : 'Tap "Add Stop" or search\nto add waypoints',
+                                ? 'Search or tap on the map\nto set end point (B)'
+                                : 'Tap "Add Stop" or search\nto add waypoints',
                             style: const TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
@@ -1963,11 +2193,8 @@ class _MapPageState extends State<MapPage> {
           if (_isLoading)
             Container(
               color: Colors.black.withValues(alpha: 0.3),
-              child: const Center(
-                child: CircularProgressIndicator(),
-              ),
+              child: const Center(child: CircularProgressIndicator()),
             ),
-
         ],
       ),
     );
@@ -2003,10 +2230,7 @@ class _MapPageState extends State<MapPage> {
             // Title
             Text(
               route.title ?? 'Unnamed Route',
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 16,
-              ),
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),

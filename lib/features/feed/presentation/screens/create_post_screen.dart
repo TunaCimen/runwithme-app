@@ -4,8 +4,10 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../../core/models/route.dart' as route_model;
+import '../../../../core/models/run_session.dart';
 import '../../../auth/data/auth_service.dart';
 import '../../../map/data/route_repository.dart';
+import '../../../run/data/run_repository.dart';
 import '../../../profile/data/image_api_client.dart';
 import '../../data/models/feed_post_dto.dart';
 import '../../data/models/create_post_dto.dart';
@@ -25,6 +27,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
   late FeedProvider _feedProvider;
   final _authService = AuthService();
   final _routeRepository = RouteRepository();
+  final _runRepository = RunRepository();
   final _imageApiClient = ImageApiClient();
   final _imagePicker = ImagePicker();
   final _textController = TextEditingController();
@@ -38,6 +41,11 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
   List<RunRoute> _userRoutes = [];
   bool _loadingRoutes = false;
   RunRoute? _selectedRoute;
+
+  // User's run sessions for selection
+  List<RunSession> _userRuns = [];
+  bool _loadingRuns = false;
+  RunSession? _selectedRun;
 
   // Photo state
   File? _selectedImage;
@@ -56,6 +64,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
     }
 
     _loadUserRoutes();
+    _loadUserRuns();
   }
 
   Future<void> _loadUserRoutes() async {
@@ -91,6 +100,40 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
     }
   }
 
+  Future<void> _loadUserRuns() async {
+    final user = _authService.currentUser;
+    final accessToken = _authService.accessToken;
+
+    if (user == null || accessToken == null) return;
+
+    setState(() {
+      _loadingRuns = true;
+    });
+
+    try {
+      final result = await _runRepository.getUserRuns(
+        user.userId,
+        accessToken: accessToken,
+        page: 0,
+        size: 50,
+      );
+
+      if (mounted) {
+        setState(() {
+          _userRuns = result.success ? (result.data ?? []) : [];
+          _loadingRuns = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('[CreatePostScreen] Error loading user runs: $e');
+      if (mounted) {
+        setState(() {
+          _loadingRuns = false;
+        });
+      }
+    }
+  }
+
   @override
   void dispose() {
     _textController.dispose();
@@ -121,7 +164,10 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
             listenable: _feedProvider,
             builder: (context, _) {
               return Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
                 child: ElevatedButton(
                   onPressed: _feedProvider.creatingPost ? null : _createPost,
                   style: ElevatedButton.styleFrom(
@@ -196,10 +242,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
         const SizedBox(width: 12),
         Text(
           user?.username ?? 'Unknown',
-          style: const TextStyle(
-            fontWeight: FontWeight.w600,
-            fontSize: 16,
-          ),
+          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
         ),
       ],
     );
@@ -361,7 +404,11 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.add_photo_alternate, size: 32, color: Colors.grey[500]),
+                  Icon(
+                    Icons.add_photo_alternate,
+                    size: 32,
+                    color: Colors.grey[500],
+                  ),
                   const SizedBox(width: 12),
                   Text(
                     'Add a photo',
@@ -394,14 +441,14 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
               children: [
                 const Text(
                   'Add Photo',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 16),
                 ListTile(
-                  leading: const Icon(Icons.camera_alt, color: Color(0xFF7ED321)),
+                  leading: const Icon(
+                    Icons.camera_alt,
+                    color: Color(0xFF7ED321),
+                  ),
                   title: const Text('Take a photo'),
                   onTap: () {
                     Navigator.pop(context);
@@ -409,7 +456,10 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
                   },
                 ),
                 ListTile(
-                  leading: const Icon(Icons.photo_library, color: Color(0xFF7ED321)),
+                  leading: const Icon(
+                    Icons.photo_library,
+                    color: Color(0xFF7ED321),
+                  ),
                   title: const Text('Choose from gallery'),
                   onTap: () {
                     Navigator.pop(context);
@@ -440,9 +490,23 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
         await _uploadImage();
       }
     } catch (e) {
+      debugPrint('[CreatePostScreen] Error picking image: $e');
       if (mounted) {
+        String errorMessage = 'Failed to pick image';
+        if (e.toString().contains('permission') ||
+            e.toString().contains('denied')) {
+          errorMessage = 'Please grant camera/photo permissions in Settings';
+        } else if (e.toString().contains('camera_access_denied')) {
+          errorMessage = 'Camera access denied. Please enable in Settings';
+        } else if (e.toString().contains('photo_access_denied')) {
+          errorMessage =
+              'Photo library access denied. Please enable in Settings';
+        }
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to pick image: $e')),
+          SnackBar(
+            content: Text(errorMessage),
+            action: SnackBarAction(label: 'OK', onPressed: () {}),
+          ),
         );
       }
     }
@@ -450,6 +514,10 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
 
   Future<void> _uploadImage() async {
     if (_selectedImage == null) return;
+
+    debugPrint(
+      '[CreatePostScreen] Starting image upload: ${_selectedImage!.path}',
+    );
 
     setState(() {
       _uploadingImage = true;
@@ -461,6 +529,8 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
         folder: 'posts',
       );
 
+      debugPrint('[CreatePostScreen] Image upload successful: $result');
+
       if (mounted) {
         setState(() {
           _uploadingImage = false;
@@ -468,13 +538,14 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
         });
       }
     } catch (e) {
+      debugPrint('[CreatePostScreen] Image upload failed: $e');
       if (mounted) {
         setState(() {
           _uploadingImage = false;
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to upload image: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to upload image: $e')));
       }
     }
   }
@@ -499,29 +570,397 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
           ),
         ),
         const SizedBox(height: 8),
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.grey[100],
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Column(
+        if (_loadingRuns)
+          Container(
+            padding: const EdgeInsets.all(32),
+            decoration: BoxDecoration(
+              color: Colors.grey[100],
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Center(child: CircularProgressIndicator()),
+          )
+        else if (_userRuns.isEmpty)
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.grey[100],
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Column(
+              children: [
+                Icon(Icons.directions_run, size: 48, color: Colors.grey[400]),
+                const SizedBox(height: 8),
+                Text(
+                  'No recent runs',
+                  style: TextStyle(color: Colors.grey[600]),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Complete a run to share it',
+                  style: TextStyle(color: Colors.grey[400], fontSize: 12),
+                ),
+              ],
+            ),
+          )
+        else
+          Column(
             children: [
-              Icon(Icons.directions_run, size: 48, color: Colors.grey[400]),
-              const SizedBox(height: 8),
-              Text(
-                'No recent runs',
-                style: TextStyle(color: Colors.grey[600]),
+              // Selected run preview
+              if (_selectedRun != null) ...[
+                _buildSelectedRunCard(_selectedRun!),
+                const SizedBox(height: 12),
+                TextButton.icon(
+                  onPressed: () => _showRunSelectionSheet(),
+                  icon: const Icon(Icons.swap_horiz),
+                  label: const Text('Change Run'),
+                ),
+              ] else
+                _buildRunSelectionButton(),
+            ],
+          ),
+      ],
+    );
+  }
+
+  Widget _buildRunSelectionButton() {
+    return InkWell(
+      onTap: () => _showRunSelectionSheet(),
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.grey[100],
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.grey[300]!),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF7ED321).withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
               ),
-              const SizedBox(height: 4),
-              Text(
-                'Complete a run to share it',
-                style: TextStyle(color: Colors.grey[400], fontSize: 12),
+              child: const Icon(Icons.directions_run, color: Color(0xFF7ED321)),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Select a run',
+                    style: TextStyle(fontWeight: FontWeight.w500, fontSize: 16),
+                  ),
+                  Text(
+                    '${_userRuns.length} runs available',
+                    style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                  ),
+                ],
               ),
+            ),
+            Icon(Icons.chevron_right, color: Colors.grey[400]),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSelectedRunCard(RunSession run) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFF7ED321)),
+      ),
+      child: Column(
+        children: [
+          // Map preview if we have route points
+          if (run.points.isNotEmpty)
+            ClipRRect(
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(11),
+              ),
+              child: SizedBox(
+                height: 150,
+                child: FlutterMap(
+                  options: MapOptions(
+                    initialCenter: LatLng(
+                      run.points.first.latitude,
+                      run.points.first.longitude,
+                    ),
+                    initialZoom: 13.0,
+                    interactionOptions: const InteractionOptions(
+                      flags: InteractiveFlag.none,
+                    ),
+                  ),
+                  children: [
+                    TileLayer(
+                      urlTemplate:
+                          'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                      userAgentPackageName: 'com.example.runwithme_app',
+                    ),
+                    PolylineLayer(
+                      polylines: [
+                        Polyline(
+                          points: run.points
+                              .map((p) => LatLng(p.latitude, p.longitude))
+                              .toList(),
+                          strokeWidth: 4.0,
+                          color: const Color(0xFF7ED321),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          // Run info
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        run.formattedDate,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 15,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.straighten,
+                            size: 14,
+                            color: Colors.grey[600],
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            run.formattedDistance,
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Icon(Icons.timer, size: 14, color: Colors.grey[600]),
+                          const SizedBox(width: 4),
+                          Text(
+                            run.formattedDuration,
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Icon(Icons.speed, size: 14, color: Colors.grey[600]),
+                          const SizedBox(width: 4),
+                          Text(
+                            run.formattedPace,
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const Icon(Icons.check_circle, color: Color(0xFF7ED321)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showRunSelectionSheet() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return DraggableScrollableSheet(
+          initialChildSize: 0.7,
+          minChildSize: 0.5,
+          maxChildSize: 0.9,
+          expand: false,
+          builder: (context, scrollController) {
+            return Column(
+              children: [
+                // Handle
+                Container(
+                  margin: const EdgeInsets.only(top: 12),
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[300],
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Select a Run',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 16),
+                Expanded(
+                  child: ListView.builder(
+                    controller: scrollController,
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    itemCount: _userRuns.length,
+                    itemBuilder: (context, index) {
+                      final run = _userRuns[index];
+                      final isSelected = _selectedRunSessionId == run.id;
+                      return _buildRunSelectionTile(run, isSelected);
+                    },
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildRunSelectionTile(RunSession run, bool isSelected) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: isSelected
+            ? const Color(0xFF7ED321).withValues(alpha: 0.1)
+            : Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isSelected ? const Color(0xFF7ED321) : Colors.grey[300]!,
+        ),
+      ),
+      child: InkWell(
+        onTap: () {
+          setState(() {
+            _selectedRun = run;
+            _selectedRunSessionId = run.id;
+          });
+          Navigator.pop(context);
+        },
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              // Run icon or mini map
+              Container(
+                width: 60,
+                height: 60,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF7ED321).withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: run.points.isNotEmpty
+                    ? ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: FlutterMap(
+                          options: MapOptions(
+                            initialCenter: LatLng(
+                              run.points.first.latitude,
+                              run.points.first.longitude,
+                            ),
+                            initialZoom: 12.0,
+                            interactionOptions: const InteractionOptions(
+                              flags: InteractiveFlag.none,
+                            ),
+                          ),
+                          children: [
+                            TileLayer(
+                              urlTemplate:
+                                  'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                              userAgentPackageName: 'com.example.runwithme_app',
+                            ),
+                            PolylineLayer(
+                              polylines: [
+                                Polyline(
+                                  points: run.points
+                                      .map(
+                                        (p) => LatLng(p.latitude, p.longitude),
+                                      )
+                                      .toList(),
+                                  strokeWidth: 2.0,
+                                  color: const Color(0xFF7ED321),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      )
+                    : const Icon(
+                        Icons.directions_run,
+                        size: 32,
+                        color: Color(0xFF7ED321),
+                      ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      run.formattedDate,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 15,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Text(
+                          run.formattedDistance,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text('•', style: TextStyle(color: Colors.grey[400])),
+                        const SizedBox(width: 8),
+                        Text(
+                          run.formattedDuration,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text('•', style: TextStyle(color: Colors.grey[400])),
+                        const SizedBox(width: 8),
+                        Text(
+                          run.formattedPace,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              if (isSelected)
+                const Icon(Icons.check_circle, color: Color(0xFF7ED321)),
             ],
           ),
         ),
-      ],
+      ),
     );
   }
 
@@ -618,17 +1057,11 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
                 children: [
                   const Text(
                     'Select a route',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w500,
-                      fontSize: 16,
-                    ),
+                    style: TextStyle(fontWeight: FontWeight.w500, fontSize: 16),
                   ),
                   Text(
                     '${_userRoutes.length} routes available',
-                    style: TextStyle(
-                      color: Colors.grey[600],
-                      fontSize: 13,
-                    ),
+                    style: TextStyle(color: Colors.grey[600], fontSize: 13),
                   ),
                 ],
               ),
@@ -667,16 +1100,22 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
                 ),
                 children: [
                   TileLayer(
-                    urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                    urlTemplate:
+                        'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                     userAgentPackageName: 'com.example.runwithme_app',
                   ),
                   PolylineLayer(
                     polylines: [
                       Polyline(
                         points: route.points.isNotEmpty
-                            ? route.points.map((p) => LatLng(p.latitude, p.longitude)).toList()
+                            ? route.points
+                                  .map((p) => LatLng(p.latitude, p.longitude))
+                                  .toList()
                             : [
-                                LatLng(route.startPointLat, route.startPointLon),
+                                LatLng(
+                                  route.startPointLat,
+                                  route.startPointLon,
+                                ),
                                 LatLng(route.endPointLat, route.endPointLon),
                               ],
                         strokeWidth: 4.0,
@@ -707,18 +1146,28 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
                       const SizedBox(height: 4),
                       Row(
                         children: [
-                          Icon(Icons.straighten, size: 14, color: Colors.grey[600]),
+                          Icon(
+                            Icons.straighten,
+                            size: 14,
+                            color: Colors.grey[600],
+                          ),
                           const SizedBox(width: 4),
                           Text(
                             route.formattedDistance,
-                            style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Colors.grey[600],
+                            ),
                           ),
                           const SizedBox(width: 12),
                           Icon(Icons.timer, size: 14, color: Colors.grey[600]),
                           const SizedBox(width: 4),
                           Text(
                             route.formattedDuration,
-                            style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Colors.grey[600],
+                            ),
                           ),
                         ],
                       ),
@@ -763,10 +1212,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
                 const SizedBox(height: 16),
                 const Text(
                   'Select a Route',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 16),
                 Expanded(
@@ -793,7 +1239,9 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: isSelected ? const Color(0xFF7ED321).withValues(alpha: 0.1) : Colors.white,
+        color: isSelected
+            ? const Color(0xFF7ED321).withValues(alpha: 0.1)
+            : Colors.white,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: isSelected ? const Color(0xFF7ED321) : Colors.grey[300]!,
@@ -831,17 +1279,28 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
                     ),
                     children: [
                       TileLayer(
-                        urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                        urlTemplate:
+                            'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                         userAgentPackageName: 'com.example.runwithme_app',
                       ),
                       PolylineLayer(
                         polylines: [
                           Polyline(
                             points: route.points.isNotEmpty
-                                ? route.points.map((p) => LatLng(p.latitude, p.longitude)).toList()
+                                ? route.points
+                                      .map(
+                                        (p) => LatLng(p.latitude, p.longitude),
+                                      )
+                                      .toList()
                                 : [
-                                    LatLng(route.startPointLat, route.startPointLon),
-                                    LatLng(route.endPointLat, route.endPointLon),
+                                    LatLng(
+                                      route.startPointLat,
+                                      route.startPointLon,
+                                    ),
+                                    LatLng(
+                                      route.endPointLat,
+                                      route.endPointLon,
+                                    ),
                                   ],
                             strokeWidth: 2.0,
                             color: const Color(0xFF7ED321),
@@ -869,26 +1328,34 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
                       children: [
                         Text(
                           route.formattedDistance,
-                          style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.grey[600],
+                          ),
                         ),
                         const SizedBox(width: 8),
-                        Text(
-                          '•',
-                          style: TextStyle(color: Colors.grey[400]),
-                        ),
+                        Text('•', style: TextStyle(color: Colors.grey[400])),
                         const SizedBox(width: 8),
                         Text(
                           route.formattedDuration,
-                          style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.grey[600],
+                          ),
                         ),
                       ],
                     ),
                     if (route.difficulty != null) ...[
                       const SizedBox(height: 4),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
                         decoration: BoxDecoration(
-                          color: _getDifficultyColor(route.difficulty!).withValues(alpha: 0.1),
+                          color: _getDifficultyColor(
+                            route.difficulty!,
+                          ).withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: Text(
@@ -1001,21 +1468,19 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
                     title,
                     style: TextStyle(
                       fontWeight: FontWeight.w500,
-                      color: isSelected ? const Color(0xFF7ED321) : Colors.black87,
+                      color: isSelected
+                          ? const Color(0xFF7ED321)
+                          : Colors.black87,
                     ),
                   ),
                   Text(
                     subtitle,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey[500],
-                    ),
+                    style: TextStyle(fontSize: 12, color: Colors.grey[500]),
                   ),
                 ],
               ),
             ),
-            if (isSelected)
-              const Icon(Icons.check, color: Color(0xFF7ED321)),
+            if (isSelected) const Icon(Icons.check, color: Color(0xFF7ED321)),
           ],
         ),
       ),
@@ -1026,42 +1491,45 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
     final text = _textController.text.trim();
 
     if (_selectedType == PostType.text && text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter some text')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Please enter some text')));
       return;
     }
 
     if (_selectedType == PostType.run && _selectedRunSessionId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a run')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Please select a run')));
       return;
     }
 
     if (_selectedType == PostType.route && _selectedRouteId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a route')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Please select a route')));
       return;
     }
+
+    // Note: PHOTO type is not used by backend - TEXT posts can have optional mediaUrl
 
     // Check if image is still uploading
     if (_uploadingImage) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please wait for image to finish uploading')),
+        const SnackBar(
+          content: Text('Please wait for image to finish uploading'),
+        ),
       );
       return;
     }
 
-    // Determine post type - if we have an uploaded image and it's a text post, switch to photo post
-    var postType = _selectedType;
-    if (_uploadedImageUrl != null && _selectedType == PostType.text) {
-      postType = PostType.photo;
-    }
+    debugPrint('[CreatePostScreen] Creating post: postType=$_selectedType');
+    debugPrint(
+      '[CreatePostScreen]   routeId=$_selectedRouteId, runSessionId=$_selectedRunSessionId, mediaUrl=$_uploadedImageUrl',
+    );
 
     final request = CreatePostDto(
-      postType: postType,
+      postType: _selectedType,
       textContent: text.isNotEmpty ? text : null,
       routeId: _selectedRouteId,
       runSessionId: _selectedRunSessionId,
@@ -1069,7 +1537,13 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
       visibility: _visibility,
     );
 
+    debugPrint('[CreatePostScreen] Request JSON: ${request.toJson()}');
+
     final result = await _feedProvider.createPost(request);
+
+    debugPrint(
+      '[CreatePostScreen] Create post result: success=${result.success}, message=${result.message}',
+    );
 
     if (mounted) {
       if (result.success) {

@@ -38,15 +38,32 @@ class UserProfile {
       firstName: json['firstName'] as String? ?? json['first_name'] as String?,
       lastName: json['lastName'] as String? ?? json['last_name'] as String?,
       pronouns: json['pronouns'] as String?,
-      birthday: json['birthday'] != null ? DateTime.parse(json['birthday'] as String) : null,
-      expertLevel: json['expertLevel'] as String? ?? json['expert_level'] as String?,
-      profilePic: json['profilePic'] as String? ?? json['profile_pic'] as String?,
-      profileVisibility: _parseBool(json['profileVisibility'] ?? json['profile_visibility'], defaultValue: true),
-      regionId: (json['regionId'] as num?)?.toInt() ?? (json['region_id'] as num?)?.toInt(),
-      subregionId: (json['subregionId'] as num?)?.toInt() ?? (json['subregion_id'] as num?)?.toInt(),
-      countryId: (json['countryId'] as num?)?.toInt() ?? (json['country_id'] as num?)?.toInt(),
-      stateId: (json['stateId'] as num?)?.toInt() ?? (json['state_id'] as num?)?.toInt(),
-      cityId: (json['cityId'] as num?)?.toInt() ?? (json['city_id'] as num?)?.toInt(),
+      birthday: json['birthday'] != null
+          ? DateTime.parse(json['birthday'] as String)
+          : null,
+      expertLevel:
+          json['expertLevel'] as String? ?? json['expert_level'] as String?,
+      profilePic:
+          json['profilePic'] as String? ?? json['profile_pic'] as String?,
+      profileVisibility: _parseBool(
+        json['profileVisibility'] ?? json['profile_visibility'],
+        defaultValue: true,
+      ),
+      regionId:
+          (json['regionId'] as num?)?.toInt() ??
+          (json['region_id'] as num?)?.toInt(),
+      subregionId:
+          (json['subregionId'] as num?)?.toInt() ??
+          (json['subregion_id'] as num?)?.toInt(),
+      countryId:
+          (json['countryId'] as num?)?.toInt() ??
+          (json['country_id'] as num?)?.toInt(),
+      stateId:
+          (json['stateId'] as num?)?.toInt() ??
+          (json['state_id'] as num?)?.toInt(),
+      cityId:
+          (json['cityId'] as num?)?.toInt() ??
+          (json['city_id'] as num?)?.toInt(),
     );
   }
 

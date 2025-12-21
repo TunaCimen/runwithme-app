@@ -1,146 +1,125 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
-import '../../../core/models/run_session.dart';
 import '../../auth/data/auth_service.dart';
-import '../../run/data/run_repository.dart';
+import '../data/location_tracking_service.dart';
 
-/// Live tracking page for recording running sessions
+/// Live tracking page for recording running sessions with background support
 class LiveTrackingPage extends StatefulWidget {
-  const LiveTrackingPage({super.key});
+  final int? routeId;
+
+  const LiveTrackingPage({super.key, this.routeId});
 
   @override
   State<LiveTrackingPage> createState() => _LiveTrackingPageState();
 }
 
-class _LiveTrackingPageState extends State<LiveTrackingPage> {
+class _LiveTrackingPageState extends State<LiveTrackingPage>
+    with WidgetsBindingObserver {
   final MapController _mapController = MapController();
   final AuthService _authService = AuthService();
-  final RunRepository _runRepository = RunRepository();
+  final LocationTrackingService _trackingService = LocationTrackingService();
 
-  // Tracking state
-  bool _isTracking = false;
-  bool _isPaused = false;
-  bool _isLoading = false;
-  DateTime? _startTime;
-  DateTime? _pauseStartTime;
-  Duration _pausedDuration = Duration.zero;
-
-  // Location data
+  // UI state
+  bool _isLoading = true;
+  bool _isStarting = false;
+  bool _isStopping = false;
   LatLng? _currentLocation;
-  final List<LatLng> _trackPoints = [];
-  StreamSubscription<Position>? _positionSubscription;
-
-  // Stats
-  double _totalDistanceM = 0;
-  int _elapsedSeconds = 0;
-  Timer? _timer;
-  double _currentSpeedMps = 0;
-
-  // Track points for saving
-  final List<RunPoint> _runPoints = [];
 
   @override
   void initState() {
     super.initState();
-    _initializeLocation();
+    WidgetsBinding.instance.addObserver(this);
+    _initializeTracking();
+    _setupCallbacks();
   }
 
   @override
   void dispose() {
-    _stopTracking();
-    _timer?.cancel();
-    _positionSubscription?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    // Don't dispose the tracking service - it should continue in background
     super.dispose();
   }
 
-  Future<void> _initializeLocation() async {
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    // Handle app lifecycle changes for background tracking
+    if (state == AppLifecycleState.resumed && _trackingService.isTracking) {
+      // App came back to foreground, refresh UI
+      setState(() {});
+    }
+  }
+
+  void _setupCallbacks() {
+    _trackingService.onLocationUpdate = (position, speed) {
+      if (mounted) {
+        setState(() {
+          _currentLocation = position;
+        });
+        // Keep map centered on current location
+        _mapController.move(position, _mapController.camera.zoom);
+      }
+    };
+
+    _trackingService.onTimerUpdate = (seconds) {
+      if (mounted) {
+        setState(() {});
+      }
+    };
+
+    _trackingService.onDistanceUpdate = (distance) {
+      if (mounted) {
+        setState(() {});
+      }
+    };
+
+    _trackingService.onError = (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error)));
+      }
+    };
+  }
+
+  Future<void> _initializeTracking() async {
     setState(() {
       _isLoading = true;
     });
 
-    try {
-      // Check permissions
-      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      if (!serviceEnabled) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Please enable location services'),
-              duration: Duration(seconds: 3),
-            ),
-          );
-        }
-        setState(() {
-          _isLoading = false;
-        });
-        return;
-      }
-
-      LocationPermission permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
-        if (permission == LocationPermission.denied) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Location permission denied'),
-                duration: Duration(seconds: 3),
-              ),
-            );
-          }
-          setState(() {
-            _isLoading = false;
-          });
-          return;
-        }
-      }
-
-      if (permission == LocationPermission.deniedForever) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Location permission permanently denied. Please enable in settings.'),
-              duration: Duration(seconds: 3),
-            ),
-          );
-        }
-        setState(() {
-          _isLoading = false;
-        });
-        return;
-      }
-
-      // Get initial position
-      final position = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.high,
-          timeLimit: Duration(seconds: 10),
-        ),
-      );
-
+    final initialized = await _trackingService.initialize();
+    if (!initialized) {
       if (mounted) {
-        setState(() {
-          _currentLocation = LatLng(position.latitude, position.longitude);
-          _isLoading = false;
-        });
-        _mapController.move(_currentLocation!, 16.0);
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to get location: $e')),
+          const SnackBar(
+            content: Text(
+              'Please enable location services and grant permissions',
+            ),
+            duration: Duration(seconds: 3),
+          ),
         );
+      }
+      setState(() {
+        _isLoading = false;
+      });
+      return;
+    }
+
+    // Get initial position
+    final position = await _trackingService.getCurrentLocation();
+    if (mounted) {
+      setState(() {
+        _currentLocation = position;
+        _isLoading = false;
+      });
+      if (position != null) {
+        _mapController.move(position, 16.0);
       }
     }
   }
 
-  void _startTracking() {
+  Future<void> _startTracking() async {
     if (_currentLocation == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Waiting for GPS signal...')),
@@ -148,106 +127,88 @@ class _LiveTrackingPageState extends State<LiveTrackingPage> {
       return;
     }
 
+    final accessToken = _authService.accessToken;
+    if (accessToken == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please log in to track runs')),
+      );
+      return;
+    }
+
+    // Request background permission on Android
+    final hasBackgroundPermission = await _trackingService
+        .requestBackgroundPermission();
+    if (!hasBackgroundPermission) {
+      if (mounted) {
+        final proceed = await _showBackgroundPermissionDialog();
+        if (!proceed) return;
+      }
+    }
+
     setState(() {
-      _isTracking = true;
-      _isPaused = false;
-      _startTime = DateTime.now();
-      _trackPoints.clear();
-      _runPoints.clear();
-      _totalDistanceM = 0;
-      _elapsedSeconds = 0;
-      _pausedDuration = Duration.zero;
+      _isStarting = true;
     });
 
-    // Add initial point
-    _trackPoints.add(_currentLocation!);
-    _addRunPoint(_currentLocation!, 0);
+    final started = await _trackingService.startTracking(
+      accessToken: accessToken,
+      routeId: widget.routeId,
+      isPublic: false,
+      useBackgroundTracking: hasBackgroundPermission,
+    );
 
-    // Start location updates
-    _positionSubscription = Geolocator.getPositionStream(
-      locationSettings: const LocationSettings(
-        accuracy: LocationAccuracy.high,
-        distanceFilter: 5, // Update every 5 meters
-      ),
-    ).listen((Position position) {
-      if (!_isTracking || _isPaused) return;
-
-      final newPoint = LatLng(position.latitude, position.longitude);
-
-      // Calculate distance from last point
-      if (_trackPoints.isNotEmpty) {
-        final lastPoint = _trackPoints.last;
-        final distance = const Distance().as(
-          LengthUnit.Meter,
-          lastPoint,
-          newPoint,
-        );
-        _totalDistanceM += distance;
-      }
-
-      setState(() {
-        _currentLocation = newPoint;
-        _trackPoints.add(newPoint);
-        _currentSpeedMps = position.speed > 0 ? position.speed : 0;
-      });
-
-      _addRunPoint(newPoint, position.speed);
-
-      // Keep map centered on current location
-      _mapController.move(newPoint, _mapController.camera.zoom);
+    setState(() {
+      _isStarting = false;
     });
 
-    // Start timer
-    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (!_isPaused) {
-        setState(() {
-          _elapsedSeconds++;
-        });
-      }
-    });
+    if (!started && mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Failed to start tracking')));
+    }
+  }
+
+  Future<bool> _showBackgroundPermissionDialog() async {
+    return await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Background Location'),
+            content: const Text(
+              'For best tracking results, allow location access "Always" in your device settings. '
+              'Without this, tracking may stop when the app is in the background.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Continue Anyway'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
   }
 
   void _pauseTracking() {
-    setState(() {
-      _isPaused = true;
-      _pauseStartTime = DateTime.now();
-    });
+    _trackingService.pauseTracking();
+    setState(() {});
   }
 
   void _resumeTracking() {
-    if (_pauseStartTime != null) {
-      _pausedDuration += DateTime.now().difference(_pauseStartTime!);
-    }
-    setState(() {
-      _isPaused = false;
-      _pauseStartTime = null;
-    });
+    _trackingService.resumeTracking();
+    setState(() {});
   }
 
-  void _stopTracking() {
-    _positionSubscription?.cancel();
-    _timer?.cancel();
-
-    if (_isTracking && _trackPoints.length > 1) {
-      _showSaveDialog();
-    } else {
-      setState(() {
-        _isTracking = false;
-        _isPaused = false;
-      });
+  Future<void> _stopTracking() async {
+    if (_trackingService.trackPoints.length <= 1) {
+      _trackingService.discardTracking();
+      setState(() {});
+      return;
     }
-  }
 
-  void _addRunPoint(LatLng point, double speed) {
-    _runPoints.add(RunPoint(
-      id: 0,
-      runSessionId: 0,
-      seqNo: _runPoints.length,
-      latitude: point.latitude,
-      longitude: point.longitude,
-      speedMps: speed,
-      timestamp: DateTime.now(),
-    ));
+    _showSaveDialog();
   }
 
   void _showSaveDialog() {
@@ -260,9 +221,9 @@ class _LiveTrackingPageState extends State<LiveTrackingPage> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildStatRow('Distance', _formattedDistance),
-            _buildStatRow('Duration', _formattedDuration),
-            _buildStatRow('Avg Pace', _formattedPace),
+            _buildStatRow('Distance', _trackingService.formattedDistance),
+            _buildStatRow('Duration', _trackingService.formattedDuration),
+            _buildStatRow('Avg Pace', _trackingService.formattedPace),
           ],
         ),
         actions: [
@@ -302,100 +263,42 @@ class _LiveTrackingPageState extends State<LiveTrackingPage> {
   }
 
   void _discardRun() {
-    setState(() {
-      _isTracking = false;
-      _isPaused = false;
-      _trackPoints.clear();
-      _runPoints.clear();
-      _totalDistanceM = 0;
-      _elapsedSeconds = 0;
-    });
+    _trackingService.discardTracking();
+    setState(() {});
   }
 
   Future<void> _saveRun() async {
     setState(() {
-      _isLoading = true;
+      _isStopping = true;
     });
 
-    // Calculate average pace
-    final avgPaceSecPerKm = _totalDistanceM > 0
-        ? (_elapsedSeconds / (_totalDistanceM / 1000))
-        : 0.0;
-
-    final runSession = RunSession(
-      id: 0,
-      runnerId: _authService.currentUser?.userId,
-      startTime: _startTime!,
-      endTime: DateTime.now(),
-      distanceM: _totalDistanceM,
-      durationS: _elapsedSeconds,
-      avgPaceSecPerKm: avgPaceSecPerKm,
-      trackPoints: _runPoints,
-      createdAt: DateTime.now(),
-      updatedAt: DateTime.now(),
-    );
-
-    final result = await _runRepository.saveRunSession(
-      runSession,
-      _authService.accessToken,
-    );
+    final session = await _trackingService.stopTracking(save: true);
 
     setState(() {
-      _isLoading = false;
-      _isTracking = false;
-      _isPaused = false;
+      _isStopping = false;
     });
 
     if (mounted) {
-      if (result.success) {
+      if (session != null) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Run saved successfully!')),
         );
         // Return the saved run session to the previous screen
-        Navigator.pop(context, result.data);
+        Navigator.pop(context, session);
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(result.message ?? 'Failed to save run')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Failed to save run')));
       }
     }
   }
 
-  String get _formattedDistance {
-    final km = _totalDistanceM / 1000;
-    if (km >= 1) {
-      return '${km.toStringAsFixed(2)} km';
-    }
-    return '${_totalDistanceM.toInt()} m';
-  }
-
-  String get _formattedDuration {
-    final hours = _elapsedSeconds ~/ 3600;
-    final minutes = (_elapsedSeconds % 3600) ~/ 60;
-    final seconds = _elapsedSeconds % 60;
-
-    if (hours > 0) {
-      return '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
-    }
-    return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
-  }
-
-  String get _formattedPace {
-    if (_totalDistanceM < 10) return '--:--/km';
-    final paceSecPerKm = _elapsedSeconds / (_totalDistanceM / 1000);
-    final minutes = paceSecPerKm ~/ 60;
-    final seconds = (paceSecPerKm % 60).toInt();
-    return '$minutes:${seconds.toString().padLeft(2, '0')}/km';
-  }
-
-  String get _formattedSpeed {
-    if (_currentSpeedMps < 0.5) return '0.0 km/h';
-    final kmh = _currentSpeedMps * 3.6;
-    return '${kmh.toStringAsFixed(1)} km/h';
-  }
-
   @override
   Widget build(BuildContext context) {
+    final isTracking = _trackingService.isTracking;
+    final isPaused = _trackingService.isPaused;
+    final trackPoints = _trackingService.trackPoints;
+
     return Scaffold(
       body: Stack(
         children: [
@@ -403,7 +306,8 @@ class _LiveTrackingPageState extends State<LiveTrackingPage> {
           FlutterMap(
             mapController: _mapController,
             options: MapOptions(
-              initialCenter: _currentLocation ?? const LatLng(41.085706, 29.001534),
+              initialCenter:
+                  _currentLocation ?? const LatLng(41.085706, 29.001534),
               initialZoom: 16.0,
               interactionOptions: const InteractionOptions(
                 flags: InteractiveFlag.all,
@@ -416,11 +320,11 @@ class _LiveTrackingPageState extends State<LiveTrackingPage> {
               ),
 
               // Track polyline
-              if (_trackPoints.length > 1)
+              if (trackPoints.length > 1)
                 PolylineLayer(
                   polylines: [
                     Polyline(
-                      points: _trackPoints,
+                      points: trackPoints,
                       strokeWidth: 5.0,
                       color: const Color(0xFF7ED321),
                     ),
@@ -437,17 +341,18 @@ class _LiveTrackingPageState extends State<LiveTrackingPage> {
                       height: 30,
                       child: Container(
                         decoration: BoxDecoration(
-                          color: _isTracking && !_isPaused
+                          color: isTracking && !isPaused
                               ? const Color(0xFF7ED321)
                               : Colors.blue,
                           shape: BoxShape.circle,
                           border: Border.all(color: Colors.white, width: 3),
                           boxShadow: [
                             BoxShadow(
-                              color: (_isTracking && !_isPaused
-                                      ? const Color(0xFF7ED321)
-                                      : Colors.blue)
-                                  .withValues(alpha: 0.3),
+                              color:
+                                  (isTracking && !isPaused
+                                          ? const Color(0xFF7ED321)
+                                          : Colors.blue)
+                                      .withValues(alpha: 0.3),
                               blurRadius: 10,
                               spreadRadius: 5,
                             ),
@@ -461,9 +366,9 @@ class _LiveTrackingPageState extends State<LiveTrackingPage> {
                       ),
                     ),
                     // Start point marker
-                    if (_trackPoints.isNotEmpty && _isTracking)
+                    if (trackPoints.isNotEmpty && isTracking)
                       Marker(
-                        point: _trackPoints.first,
+                        point: trackPoints.first,
                         width: 24,
                         height: 24,
                         child: Container(
@@ -502,7 +407,7 @@ class _LiveTrackingPageState extends State<LiveTrackingPage> {
               child: IconButton(
                 icon: const Icon(Icons.arrow_back),
                 onPressed: () {
-                  if (_isTracking) {
+                  if (isTracking) {
                     _showExitConfirmation();
                   } else {
                     Navigator.pop(context);
@@ -539,7 +444,7 @@ class _LiveTrackingPageState extends State<LiveTrackingPage> {
           ),
 
           // Stats panel
-          if (_isTracking)
+          if (isTracking)
             Positioned(
               top: MediaQuery.of(context).padding.top + 80,
               left: 16,
@@ -560,7 +465,7 @@ class _LiveTrackingPageState extends State<LiveTrackingPage> {
                   children: [
                     // Duration (large)
                     Text(
-                      _formattedDuration,
+                      _trackingService.formattedDuration,
                       style: const TextStyle(
                         fontSize: 48,
                         fontWeight: FontWeight.bold,
@@ -572,12 +477,21 @@ class _LiveTrackingPageState extends State<LiveTrackingPage> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceAround,
                       children: [
-                        _buildStatColumn('Distance', _formattedDistance),
-                        _buildStatColumn('Pace', _formattedPace),
-                        _buildStatColumn('Speed', _formattedSpeed),
+                        _buildStatColumn(
+                          'Distance',
+                          _trackingService.formattedDistance,
+                        ),
+                        _buildStatColumn(
+                          'Pace',
+                          _trackingService.formattedPace,
+                        ),
+                        _buildStatColumn(
+                          'Speed',
+                          _trackingService.formattedSpeed,
+                        ),
                       ],
                     ),
-                    if (_isPaused)
+                    if (isPaused)
                       Container(
                         margin: const EdgeInsets.only(top: 12),
                         padding: const EdgeInsets.symmetric(
@@ -616,10 +530,10 @@ class _LiveTrackingPageState extends State<LiveTrackingPage> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                if (!_isTracking) ...[
+                if (!isTracking) ...[
                   // Start button
                   GestureDetector(
-                    onTap: _isLoading ? null : _startTracking,
+                    onTap: (_isLoading || _isStarting) ? null : _startTracking,
                     child: Container(
                       width: 80,
                       height: 80,
@@ -628,23 +542,36 @@ class _LiveTrackingPageState extends State<LiveTrackingPage> {
                         shape: BoxShape.circle,
                         boxShadow: [
                           BoxShadow(
-                            color: const Color(0xFF7ED321).withValues(alpha: 0.3),
+                            color: const Color(
+                              0xFF7ED321,
+                            ).withValues(alpha: 0.3),
                             blurRadius: 20,
                             spreadRadius: 5,
                           ),
                         ],
                       ),
-                      child: const Icon(
-                        Icons.play_arrow,
-                        color: Colors.white,
-                        size: 48,
-                      ),
+                      child: _isStarting
+                          ? const Center(
+                              child: SizedBox(
+                                width: 32,
+                                height: 32,
+                                child: CircularProgressIndicator(
+                                  color: Colors.white,
+                                  strokeWidth: 3,
+                                ),
+                              ),
+                            )
+                          : const Icon(
+                              Icons.play_arrow,
+                              color: Colors.white,
+                              size: 48,
+                            ),
                     ),
                   ),
                 ] else ...[
                   // Pause/Resume button
                   GestureDetector(
-                    onTap: _isPaused ? _resumeTracking : _pauseTracking,
+                    onTap: isPaused ? _resumeTracking : _pauseTracking,
                     child: Container(
                       width: 64,
                       height: 64,
@@ -659,7 +586,7 @@ class _LiveTrackingPageState extends State<LiveTrackingPage> {
                         ],
                       ),
                       child: Icon(
-                        _isPaused ? Icons.play_arrow : Icons.pause,
+                        isPaused ? Icons.play_arrow : Icons.pause,
                         color: Colors.white,
                         size: 32,
                       ),
@@ -668,7 +595,7 @@ class _LiveTrackingPageState extends State<LiveTrackingPage> {
                   const SizedBox(width: 32),
                   // Stop button
                   GestureDetector(
-                    onTap: _stopTracking,
+                    onTap: _isStopping ? null : _stopTracking,
                     child: Container(
                       width: 64,
                       height: 64,
@@ -682,11 +609,22 @@ class _LiveTrackingPageState extends State<LiveTrackingPage> {
                           ),
                         ],
                       ),
-                      child: const Icon(
-                        Icons.stop,
-                        color: Colors.white,
-                        size: 32,
-                      ),
+                      child: _isStopping
+                          ? const Center(
+                              child: SizedBox(
+                                width: 24,
+                                height: 24,
+                                child: CircularProgressIndicator(
+                                  color: Colors.white,
+                                  strokeWidth: 2,
+                                ),
+                              ),
+                            )
+                          : const Icon(
+                              Icons.stop,
+                              color: Colors.white,
+                              size: 32,
+                            ),
                     ),
                   ),
                 ],
@@ -698,9 +636,7 @@ class _LiveTrackingPageState extends State<LiveTrackingPage> {
           if (_isLoading)
             Container(
               color: Colors.black.withValues(alpha: 0.3),
-              child: const Center(
-                child: CircularProgressIndicator(),
-              ),
+              child: const Center(child: CircularProgressIndicator()),
             ),
         ],
       ),
@@ -712,19 +648,10 @@ class _LiveTrackingPageState extends State<LiveTrackingPage> {
       children: [
         Text(
           value,
-          style: const TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-          ),
+          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 4),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            color: Colors.grey[600],
-          ),
-        ),
+        Text(label, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
       ],
     );
   }

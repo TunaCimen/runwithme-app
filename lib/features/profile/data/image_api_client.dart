@@ -6,19 +6,18 @@ class ImageApiClient {
   final Dio _dio;
   final String _baseUrl;
 
-  ImageApiClient({
-    String baseUrl = 'http://35.158.35.102:8080',
-    Dio? dio,
-  })  : _baseUrl = baseUrl,
-        _dio = dio ??
-            Dio(BaseOptions(
+  ImageApiClient({String baseUrl = 'http://35.158.35.102:8080', Dio? dio})
+    : _baseUrl = baseUrl,
+      _dio =
+          dio ??
+          Dio(
+            BaseOptions(
               baseUrl: baseUrl,
               connectTimeout: const Duration(seconds: 30),
               receiveTimeout: const Duration(seconds: 60),
-              headers: {
-                'Accept': 'application/json',
-              },
-            ));
+              headers: {'Accept': 'application/json'},
+            ),
+          );
 
   /// Set authorization token
   void setAuthToken(String token) {
@@ -29,8 +28,6 @@ class ImageApiClient {
   /// POST /api/v1/images/profile-pictures
   /// Returns the filename of the uploaded image
   Future<String> uploadProfilePicture(String filePath) async {
-    print('[ImageApiClient] uploadProfilePicture called: $filePath');
-
     final formData = FormData.fromMap({
       'file': await MultipartFile.fromFile(
         filePath,
@@ -41,19 +38,13 @@ class ImageApiClient {
     final response = await _dio.post(
       '/api/v1/images/profile-pictures',
       data: formData,
-      options: Options(
-        contentType: 'multipart/form-data',
-      ),
+      options: Options(contentType: 'multipart/form-data'),
     );
-
-    print('[ImageApiClient] uploadProfilePicture response: ${response.statusCode}');
-    print('[ImageApiClient] uploadProfilePicture data: ${response.data}');
 
     final data = _decodeResponse(response.data);
 
-    // The API might return the filename in different ways
-    // Try common field names
-    final filename = data['filename'] ??
+    final filename =
+        data['filename'] ??
         data['fileName'] ??
         data['file_name'] ??
         data['url'] ??
@@ -64,11 +55,9 @@ class ImageApiClient {
         data['profile_pic_url'];
 
     if (filename == null) {
-      print('[ImageApiClient] Response data keys: ${data.keys.toList()}');
-      throw Exception('No filename returned from upload API. Response: $data');
+      throw Exception('No filename returned from upload API');
     }
 
-    print('[ImageApiClient] Uploaded filename: $filename');
     return filename.toString();
   }
 
@@ -76,8 +65,6 @@ class ImageApiClient {
   /// POST /api/v1/images/upload?folder={folder}
   /// Returns the URL or filename of the uploaded image
   Future<String> uploadImage(String filePath, {String folder = 'posts'}) async {
-    print('[ImageApiClient] uploadImage called: $filePath to folder: $folder');
-
     final formData = FormData.fromMap({
       'file': await MultipartFile.fromFile(
         filePath,
@@ -89,18 +76,13 @@ class ImageApiClient {
       '/api/v1/images/upload',
       queryParameters: {'folder': folder},
       data: formData,
-      options: Options(
-        contentType: 'multipart/form-data',
-      ),
+      options: Options(contentType: 'multipart/form-data'),
     );
-
-    print('[ImageApiClient] uploadImage response: ${response.statusCode}');
-    print('[ImageApiClient] uploadImage data: ${response.data}');
 
     final data = _decodeResponse(response.data);
 
-    // The API might return the URL in different ways
-    final url = data['url'] ??
+    final url =
+        data['url'] ??
         data['imageUrl'] ??
         data['image_url'] ??
         data['filename'] ??
@@ -109,18 +91,12 @@ class ImageApiClient {
         data['path'];
 
     if (url == null) {
-      print('[ImageApiClient] Response data keys: ${data.keys.toList()}');
-      throw Exception('No URL returned from upload API. Response: $data');
+      throw Exception('No URL returned from upload API');
     }
 
-    // If the returned value is just a filename, construct the full URL
-    var resultUrl = url.toString();
-    if (!resultUrl.startsWith('http://') && !resultUrl.startsWith('https://')) {
-      resultUrl = '$_baseUrl/api/v1/images/$folder/$resultUrl';
-    }
-
-    print('[ImageApiClient] Uploaded URL: $resultUrl');
-    return resultUrl;
+    // Return just the filename/path - let the backend handle URL construction
+    // This prevents double URL construction when the post is saved
+    return url.toString();
   }
 
   /// Get the full URL for a profile picture

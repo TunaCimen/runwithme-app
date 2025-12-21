@@ -18,7 +18,9 @@ class Subregion {
     return Subregion(
       id: (json['id'] as num).toInt(),
       name: json['name'] as String,
-      regionId: (json['regionId'] as num?)?.toInt() ?? (json['region_id'] as num).toInt(),
+      regionId:
+          (json['regionId'] as num?)?.toInt() ??
+          (json['region_id'] as num).toInt(),
       flag: (json['flag'] as num?)?.toInt() ?? 1,
       wikiDataId: json['wikiDataId'] as String?,
     );

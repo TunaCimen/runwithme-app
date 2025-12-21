@@ -19,19 +19,11 @@ class FeedResult<T> {
   });
 
   factory FeedResult.success(T data, {String? message}) {
-    return FeedResult._(
-      success: true,
-      data: data,
-      message: message,
-    );
+    return FeedResult._(success: true, data: data, message: message);
   }
 
   factory FeedResult.failure({String? message, String? errorCode}) {
-    return FeedResult._(
-      success: false,
-      message: message,
-      errorCode: errorCode,
-    );
+    return FeedResult._(success: false, message: message, errorCode: errorCode);
   }
 }
 
@@ -71,7 +63,11 @@ class FeedRepository {
     int size = 10,
   }) async {
     try {
-      final result = await _apiClient.getUserPosts(userId, page: page, size: size);
+      final result = await _apiClient.getUserPosts(
+        userId,
+        page: page,
+        size: size,
+      );
       return FeedResult.success(result);
     } on DioException catch (e) {
       return _handleDioError(e);
@@ -201,7 +197,11 @@ class FeedRepository {
     int size = 20,
   }) async {
     try {
-      final result = await _apiClient.getComments(postId, page: page, size: size);
+      final result = await _apiClient.getComments(
+        postId,
+        page: page,
+        size: size,
+      );
       return FeedResult.success(result);
     } on DioException catch (e) {
       return _handleDioError(e);

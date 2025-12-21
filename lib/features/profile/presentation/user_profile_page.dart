@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../core/models/user_profile.dart';
+import '../../../core/models/user_statistics.dart';
 import '../../../core/utils/profile_pic_helper.dart';
 import '../../auth/data/auth_service.dart';
 import '../data/profile_repository.dart';
@@ -12,11 +13,7 @@ class UserProfilePage extends StatefulWidget {
   final String userId;
   final String? username;
 
-  const UserProfilePage({
-    super.key,
-    required this.userId,
-    this.username,
-  });
+  const UserProfilePage({super.key, required this.userId, this.username});
 
   @override
   State<UserProfilePage> createState() => _UserProfilePageState();
@@ -36,11 +33,15 @@ class _UserProfilePageState extends State<UserProfilePage> {
   String? _requestId; // For accepting/rejecting requests
   bool _isLoadingFriendship = false;
 
+  // User statistics
+  UserStatistics? _userStatistics;
+
   @override
   void initState() {
     super.initState();
     _loadProfile();
     _loadFriendshipStatus();
+    _loadUserStatistics();
   }
 
   Future<void> _loadProfile() async {
@@ -83,7 +84,9 @@ class _UserProfilePageState extends State<UserProfilePage> {
     _friendsRepository.setAuthToken(accessToken);
 
     // First try the status endpoint
-    final result = await _friendsRepository.checkFriendshipStatus(widget.userId);
+    final result = await _friendsRepository.checkFriendshipStatus(
+      widget.userId,
+    );
     if (mounted && result.success && result.data != null) {
       // Only update if we got a non-none status from the API
       if (result.data!.status != FriendshipStatusType.none) {
@@ -158,6 +161,22 @@ class _UserProfilePageState extends State<UserProfilePage> {
     }
   }
 
+  Future<void> _loadUserStatistics() async {
+    final accessToken = _authService.accessToken;
+    if (accessToken == null) return;
+
+    final result = await _profileRepository.getUserStatistics(
+      widget.userId,
+      accessToken: accessToken,
+    );
+
+    if (mounted && result.success && result.statistics != null) {
+      setState(() {
+        _userStatistics = result.statistics;
+      });
+    }
+  }
+
   Future<void> _sendFriendRequest() async {
     final accessToken = _authService.accessToken;
     if (accessToken == null) return;
@@ -176,9 +195,9 @@ class _UserProfilePageState extends State<UserProfilePage> {
           _friendshipStatus = FriendshipStatusType.pendingSent;
           _requestId = result.data?.requestId;
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Friend request sent!')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Friend request sent!')));
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(result.message ?? 'Failed to send request')),
@@ -220,7 +239,9 @@ class _UserProfilePageState extends State<UserProfilePage> {
           otherUserName: _userProfile?.fullName.isNotEmpty == true
               ? _userProfile!.fullName
               : widget.username ?? 'User',
-          otherProfilePic: ProfilePicHelper.getProfilePicUrl(_userProfile?.profilePic),
+          otherProfilePic: ProfilePicHelper.getProfilePicUrl(
+            _userProfile?.profilePic,
+          ),
         ),
       ),
     );
@@ -244,18 +265,17 @@ class _UserProfilePageState extends State<UserProfilePage> {
                   gradient: LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
-                    colors: [
-                      Color(0xFF7ED321),
-                      Color(0xFF9AE64A),
-                    ],
+                    colors: [Color(0xFF7ED321), Color(0xFF9AE64A)],
                   ),
                 ),
                 child: SafeArea(
                   child: _isLoading
-                      ? const Center(child: CircularProgressIndicator(color: Colors.white))
+                      ? const Center(
+                          child: CircularProgressIndicator(color: Colors.white),
+                        )
                       : _errorMessage != null
-                          ? _buildErrorContent()
-                          : _buildProfileHeader(),
+                      ? _buildErrorContent()
+                      : _buildProfileHeader(),
                 ),
               ),
             ),
@@ -266,8 +286,8 @@ class _UserProfilePageState extends State<UserProfilePage> {
             child: _isLoading
                 ? const SizedBox.shrink()
                 : _errorMessage != null
-                    ? const SizedBox.shrink()
-                    : _buildProfileContent(isOwnProfile),
+                ? const SizedBox.shrink()
+                : _buildProfileContent(isOwnProfile),
           ),
         ],
       ),
@@ -315,7 +335,9 @@ class _UserProfilePageState extends State<UserProfilePage> {
           const SizedBox(height: 10),
           Builder(
             builder: (context) {
-              final profilePicUrl = ProfilePicHelper.getProfilePicUrl(_userProfile?.profilePic);
+              final profilePicUrl = ProfilePicHelper.getProfilePicUrl(
+                _userProfile?.profilePic,
+              );
               return CircleAvatar(
                 radius: 50,
                 backgroundColor: Colors.white,
@@ -324,7 +346,9 @@ class _UserProfilePageState extends State<UserProfilePage> {
                     : null,
                 child: profilePicUrl == null
                     ? Text(
-                        displayName.isNotEmpty ? displayName[0].toUpperCase() : '?',
+                        displayName.isNotEmpty
+                            ? displayName[0].toUpperCase()
+                            : '?',
                         style: const TextStyle(
                           fontSize: 40,
                           fontWeight: FontWeight.bold,
@@ -354,21 +378,27 @@ class _UserProfilePageState extends State<UserProfilePage> {
               ),
               child: Text(
                 _userProfile!.expertLevel!,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 14,
-                ),
+                style: const TextStyle(color: Colors.white, fontSize: 14),
               ),
             ),
           ],
           const SizedBox(height: 16),
-          // Stats row (placeholder for now)
+          // Stats row
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
-              _buildStatColumn('Runs', '0'),
-              _buildStatColumn('Distance', '0 km'),
-              _buildStatColumn('Routes', '0'),
+              _buildStatColumn(
+                'Runs/wk',
+                '${_userStatistics?.runsPerWeek ?? 0}',
+              ),
+              _buildStatColumn(
+                'Distance',
+                '${_userStatistics?.allTimeDistanceKm.toStringAsFixed(1) ?? '0'} km',
+              ),
+              _buildStatColumn(
+                'Avg Pace',
+                _userStatistics?.averagePace ?? '--',
+              ),
             ],
           ),
         ],
@@ -390,10 +420,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
         const SizedBox(height: 4),
         Text(
           label,
-          style: const TextStyle(
-            fontSize: 14,
-            color: Colors.white70,
-          ),
+          style: const TextStyle(fontSize: 14, color: Colors.white70),
         ),
       ],
     );
@@ -413,7 +440,9 @@ class _UserProfilePageState extends State<UserProfilePage> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: OutlinedButton.icon(
-                    onPressed: _friendshipStatus == FriendshipStatusType.friends ? _openChat : null,
+                    onPressed: _friendshipStatus == FriendshipStatusType.friends
+                        ? _openChat
+                        : null,
                     icon: const Icon(Icons.chat_bubble_outline),
                     label: const Text('Message'),
                     style: OutlinedButton.styleFrom(
@@ -440,10 +469,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
           // Activity section placeholder
           const Text(
             'Recent Activity',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 12),
           Container(
@@ -459,10 +485,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
                   const SizedBox(height: 12),
                   Text(
                     'No recent activity',
-                    style: TextStyle(
-                      fontSize: 16,
-                      color: Colors.grey[600],
-                    ),
+                    style: TextStyle(fontSize: 16, color: Colors.grey[600]),
                   ),
                 ],
               ),
@@ -560,20 +583,11 @@ class _UserProfilePageState extends State<UserProfilePage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 14,
-            color: Colors.grey[600],
-          ),
-        ),
+        Text(label, style: TextStyle(fontSize: 14, color: Colors.grey[600])),
         const SizedBox(height: 4),
         Text(
           value,
-          style: const TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w500,
-          ),
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
         ),
       ],
     );

@@ -11,17 +11,17 @@ dependencies:
     sdk: flutter
   bloc: ^9.1.0
   dio: ^5.9.0
-  flutter_map: ^7.0.2
+  flutter_map: ^8.2.2
   latlong2: ^0.9.1
   geocoding: ^4.0.0
   http: ^1.2.0
-  geolocator: ^13.0.2
+  geolocator: ^14.0.2
   image_picker: ^1.1.2
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^5.0.0
+  flutter_lints: ^6.0.0
 
 flutter:
   uses-material-design: true
