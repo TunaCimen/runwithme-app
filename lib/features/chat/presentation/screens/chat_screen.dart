@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../auth/data/auth_service.dart';
 import '../../providers/chat_provider.dart';
+import '../../providers/global_chat_provider.dart';
 import '../widgets/message_bubble.dart';
 
 /// Screen for individual chat conversation
@@ -33,12 +34,18 @@ class _ChatScreenState extends State<ChatScreen> {
       '[ChatScreen] initState: otherUserId=${widget.otherUserId}, otherUserName=${widget.otherUserName}',
     );
 
-    _chatProvider = ChatProvider();
+    // Use the global chat provider to benefit from WebSocket connection
+    _chatProvider = globalChatProvider;
 
     final token = _authService.accessToken;
+    final currentUser = _authService.currentUser;
     debugPrint('[ChatScreen] Token present: ${token != null}');
+
     if (token != null) {
-      _chatProvider.setAuthToken(token);
+      // Ensure provider has auth token and user ID
+      if (currentUser != null) {
+        _chatProvider.setCurrentUserId(currentUser.userId);
+      }
       _chatProvider.openConversation(widget.otherUserId);
     } else {
       debugPrint('[ChatScreen] WARNING: No auth token available!');

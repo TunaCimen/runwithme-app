@@ -52,7 +52,10 @@ class RouteDto {
       distanceM: (json['distanceM'] as num?)?.toDouble(),
       estimatedDurationS: (json['estimatedDurationS'] as num?)?.toInt(),
       difficulty: json['difficulty'] as String?,
-      isPublic: json['public'] as bool?,
+      // Check for all possible field names: isPublic, is_public, public
+      isPublic: (json['isPublic'] as bool?) ??
+          (json['is_public'] as bool?) ??
+          (json['public'] as bool?),
       startPointLat: (json['startPointLat'] as num?)?.toDouble(),
       startPointLon: (json['startPointLon'] as num?)?.toDouble(),
       endPointLat: (json['endPointLat'] as num?)?.toDouble(),

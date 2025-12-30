@@ -133,6 +133,18 @@ class ChatRepository {
     }
   }
 
+  /// Get total unread message count
+  Future<ChatResult<int>> getUnreadCount() async {
+    try {
+      final result = await _apiClient.getUnreadCount();
+      return ChatResult.success(result);
+    } on DioException catch (e) {
+      return _handleDioError(e);
+    } catch (e) {
+      return ChatResult.failure(message: e.toString());
+    }
+  }
+
   ChatResult<T> _handleDioError<T>(DioException e) {
     String message;
     String? errorCode;

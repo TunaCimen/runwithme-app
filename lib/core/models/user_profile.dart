@@ -16,6 +16,12 @@ class UserProfile {
   final int? stateId;
   final int? cityId;
 
+  // Visibility check - true if this is a restricted/limited profile
+  final bool isRestricted;
+
+  // Username (returned in limited profile)
+  final String? username;
+
   const UserProfile({
     required this.userId,
     this.firstName,
@@ -30,9 +36,17 @@ class UserProfile {
     this.countryId,
     this.stateId,
     this.cityId,
+    this.isRestricted = false,
+    this.username,
   });
 
   factory UserProfile.fromJson(Map<String, dynamic> json) {
+    // Check if this is a limited/restricted profile response
+    final isRestricted = _parseBool(
+      json['isRestricted'] ?? json['is_restricted'],
+      defaultValue: false,
+    );
+
     return UserProfile(
       userId: json['userId'] as String? ?? json['user_id'] as String? ?? '',
       firstName: json['firstName'] as String? ?? json['first_name'] as String?,
@@ -64,6 +78,8 @@ class UserProfile {
       cityId:
           (json['cityId'] as num?)?.toInt() ??
           (json['city_id'] as num?)?.toInt(),
+      isRestricted: isRestricted,
+      username: json['username'] as String?,
     );
   }
 
@@ -91,13 +107,21 @@ class UserProfile {
       'countryId': countryId,
       'stateId': stateId,
       'cityId': cityId,
+      if (username != null) 'username': username,
     };
   }
 
   String get fullName {
-    if (firstName == null && lastName == null) return '';
+    if (firstName == null && lastName == null) return username ?? '';
     if (firstName != null && lastName != null) return '$firstName $lastName';
-    return firstName ?? lastName ?? '';
+    return firstName ?? lastName ?? username ?? '';
+  }
+
+  /// Get display name (prefers full name, falls back to username)
+  String get displayName {
+    final name = fullName;
+    if (name.isNotEmpty) return name;
+    return username ?? 'Unknown User';
   }
 
   @override
@@ -119,6 +143,8 @@ class UserProfile {
     int? countryId,
     int? stateId,
     int? cityId,
+    bool? isRestricted,
+    String? username,
   }) {
     return UserProfile(
       userId: userId ?? this.userId,
@@ -134,6 +160,8 @@ class UserProfile {
       countryId: countryId ?? this.countryId,
       stateId: stateId ?? this.stateId,
       cityId: cityId ?? this.cityId,
+      isRestricted: isRestricted ?? this.isRestricted,
+      username: username ?? this.username,
     );
   }
 }

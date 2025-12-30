@@ -1,7 +1,11 @@
 import 'dart:convert';
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import '../../../core/models/user_profile.dart';
 import '../../../core/models/user_statistics.dart';
+import '../../map/data/models/route_dto.dart';
+import '../../../core/models/run_session.dart';
+import '../../feed/data/models/feed_post_dto.dart';
 
 /// Paginated response for user profiles
 class PaginatedProfilesResponse {
@@ -78,6 +82,7 @@ class ProfileApiClient {
 
   /// Get user profile by user ID
   /// GET /api/v1/user-profiles/:id
+  /// Returns either full UserProfileDto or LimitedUserProfileDto based on visibility
   Future<UserProfile> getUserProfile(
     String userId, {
     String? accessToken,
@@ -89,7 +94,8 @@ class ProfileApiClient {
           : null,
     );
 
-    return UserProfile.fromJson(_decodeResponse(response.data));
+    final data = _decodeResponse(response.data);
+    return UserProfile.fromJson(data);
   }
 
   /// Update user profile
@@ -159,6 +165,75 @@ class ProfileApiClient {
     );
 
     return UserStatistics.fromJson(_decodeResponse(response.data));
+  }
+
+  /// Get user's saved routes
+  /// GET /api/v1/users/:userId/saved-routes
+  Future<List<RouteDto>> getUserRoutes(
+    String userId, {
+    String? accessToken,
+    int page = 0,
+    int size = 20,
+  }) async {
+    final response = await _dio.get(
+      '/api/v1/users/$userId/saved-routes',
+      queryParameters: {'page': page, 'size': size},
+      options: accessToken != null
+          ? Options(headers: {'Authorization': 'Bearer $accessToken'})
+          : null,
+    );
+
+    final data = _decodeResponse(response.data);
+    final content = data['content'] as List<dynamic>? ?? [];
+    return content
+        .map((e) => RouteDto.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// Get user's run sessions
+  /// GET /api/v1/run-sessions/user/:userId
+  Future<List<RunSession>> getUserRunSessions(
+    String userId, {
+    String? accessToken,
+    int page = 0,
+    int size = 20,
+  }) async {
+    final response = await _dio.get(
+      '/api/v1/run-sessions/user/$userId',
+      queryParameters: {'page': page, 'size': size},
+      options: accessToken != null
+          ? Options(headers: {'Authorization': 'Bearer $accessToken'})
+          : null,
+    );
+
+    final data = _decodeResponse(response.data);
+    final content = data['content'] as List<dynamic>? ?? [];
+    return content
+        .map((e) => RunSession.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// Get user's feed posts
+  /// GET /api/v1/feed-posts/user/:userId
+  Future<List<FeedPostDto>> getUserPosts(
+    String userId, {
+    String? accessToken,
+    int page = 0,
+    int size = 20,
+  }) async {
+    final response = await _dio.get(
+      '/api/v1/feed-posts/user/$userId',
+      queryParameters: {'page': page, 'size': size},
+      options: accessToken != null
+          ? Options(headers: {'Authorization': 'Bearer $accessToken'})
+          : null,
+    );
+
+    final data = _decodeResponse(response.data);
+    final content = data['content'] as List<dynamic>? ?? [];
+    return content
+        .map((e) => FeedPostDto.fromJson(e as Map<String, dynamic>))
+        .toList();
   }
 
   dynamic _decodeResponse(dynamic data) {

@@ -1,12 +1,17 @@
 import 'package:flutter/material.dart';
 import '../../../core/models/user_profile.dart';
 import '../../../core/models/user_statistics.dart';
+import '../../../core/models/run_session.dart';
 import '../../../core/utils/profile_pic_helper.dart';
 import '../../auth/data/auth_service.dart';
 import '../data/profile_repository.dart';
+import '../../map/data/models/route_dto.dart';
+import '../../feed/data/models/feed_post_dto.dart';
 import '../../friends/data/friends_repository.dart';
 import '../../friends/data/friends_api_client.dart';
 import '../../chat/presentation/screens/chat_screen.dart';
+import '../../feed/presentation/widgets/feed_post_card.dart';
+import '../../feed/presentation/screens/post_detail_screen.dart';
 
 /// Page to view another user's profile
 class UserProfilePage extends StatefulWidget {
@@ -19,10 +24,13 @@ class UserProfilePage extends StatefulWidget {
   State<UserProfilePage> createState() => _UserProfilePageState();
 }
 
-class _UserProfilePageState extends State<UserProfilePage> {
+class _UserProfilePageState extends State<UserProfilePage>
+    with SingleTickerProviderStateMixin {
   final _authService = AuthService();
   final _profileRepository = ProfileRepository();
   final _friendsRepository = FriendsRepository();
+
+  late TabController _tabController;
 
   UserProfile? _userProfile;
   bool _isLoading = true;
@@ -30,18 +38,30 @@ class _UserProfilePageState extends State<UserProfilePage> {
 
   // Friendship state
   FriendshipStatusType _friendshipStatus = FriendshipStatusType.none;
-  String? _requestId; // For accepting/rejecting requests
+  String? _requestId;
   bool _isLoadingFriendship = false;
 
   // User statistics
   UserStatistics? _userStatistics;
 
+  // User data (routes, runs, posts)
+  List<RouteDto> _userRoutes = [];
+  List<RunSession> _userRuns = [];
+  List<FeedPostDto> _userPosts = [];
+  bool _isLoadingData = false;
+
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 3, vsync: this);
     _loadProfile();
     _loadFriendshipStatus();
-    _loadUserStatistics();
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadProfile() async {
@@ -66,6 +86,12 @@ class _UserProfilePageState extends State<UserProfilePage> {
         _isLoading = false;
         if (result.success && result.profile != null) {
           _userProfile = result.profile;
+
+          // Only load additional data if profile is not restricted
+          if (_userProfile?.isRestricted != true) {
+            _loadUserStatistics();
+            _loadUserData();
+          }
         } else {
           _errorMessage = result.message;
         }
@@ -78,17 +104,14 @@ class _UserProfilePageState extends State<UserProfilePage> {
     final currentUser = _authService.currentUser;
     if (accessToken == null || currentUser == null) return;
 
-    // Don't check friendship status for own profile
     if (currentUser.userId == widget.userId) return;
 
     _friendsRepository.setAuthToken(accessToken);
 
-    // First try the status endpoint
     final result = await _friendsRepository.checkFriendshipStatus(
       widget.userId,
     );
     if (mounted && result.success && result.data != null) {
-      // Only update if we got a non-none status from the API
       if (result.data!.status != FriendshipStatusType.none) {
         setState(() {
           _friendshipStatus = result.data!.status;
@@ -98,16 +121,12 @@ class _UserProfilePageState extends State<UserProfilePage> {
       }
     }
 
-    // If status endpoint returned none, verify by checking friends and requests
-    // This handles the case where the status endpoint doesn't exist or fails
     if (mounted) {
       await _verifyFriendshipViaLists();
     }
   }
 
-  /// Verify friendship by checking friends list and pending requests
   Future<void> _verifyFriendshipViaLists() async {
-    // Check friends list
     final friendsResult = await _friendsRepository.getFriends();
     if (friendsResult.success && friendsResult.data != null) {
       final isFriend = friendsResult.data!.content.any(
@@ -121,7 +140,6 @@ class _UserProfilePageState extends State<UserProfilePage> {
       }
     }
 
-    // Check sent requests
     final sentResult = await _friendsRepository.getSentRequests();
     if (sentResult.success && sentResult.data != null) {
       final sentRequest = sentResult.data!.content.where(
@@ -138,7 +156,6 @@ class _UserProfilePageState extends State<UserProfilePage> {
       }
     }
 
-    // Check received requests
     final receivedResult = await _friendsRepository.getReceivedRequests();
     if (receivedResult.success && receivedResult.data != null) {
       final receivedRequest = receivedResult.data!.content.where(
@@ -155,7 +172,6 @@ class _UserProfilePageState extends State<UserProfilePage> {
       }
     }
 
-    // If none found, status is none (no relationship)
     if (mounted) {
       setState(() => _friendshipStatus = FriendshipStatusType.none);
     }
@@ -173,6 +189,44 @@ class _UserProfilePageState extends State<UserProfilePage> {
     if (mounted && result.success && result.statistics != null) {
       setState(() {
         _userStatistics = result.statistics;
+      });
+    }
+  }
+
+  Future<void> _loadUserData() async {
+    final accessToken = _authService.accessToken;
+    if (accessToken == null) return;
+
+    setState(() => _isLoadingData = true);
+
+    // Load all data in parallel
+    final results = await Future.wait([
+      _profileRepository.getUserRoutes(widget.userId, accessToken: accessToken),
+      _profileRepository.getUserRunSessions(
+        widget.userId,
+        accessToken: accessToken,
+      ),
+      _profileRepository.getUserPosts(widget.userId, accessToken: accessToken),
+    ]);
+
+    if (mounted) {
+      setState(() {
+        _isLoadingData = false;
+
+        final routesResult = results[0] as UserRoutesResult;
+        if (routesResult.success) {
+          _userRoutes = routesResult.routes;
+        }
+
+        final runsResult = results[1] as UserRunsResult;
+        if (runsResult.success) {
+          _userRuns = runsResult.runs;
+        }
+
+        final postsResult = results[2] as UserPostsResult;
+        if (postsResult.success) {
+          _userPosts = postsResult.posts;
+        }
       });
     }
   }
@@ -219,6 +273,8 @@ class _UserProfilePageState extends State<UserProfilePage> {
       setState(() => _isLoadingFriendship = false);
       if (result.success) {
         setState(() => _friendshipStatus = FriendshipStatusType.friends);
+        // Reload profile to get full data after becoming friends
+        _loadProfile();
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Friend request accepted!')),
         );
@@ -236,9 +292,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
       MaterialPageRoute(
         builder: (context) => ChatScreen(
           otherUserId: widget.userId,
-          otherUserName: _userProfile?.fullName.isNotEmpty == true
-              ? _userProfile!.fullName
-              : widget.username ?? 'User',
+          otherUserName: _userProfile?.displayName ?? widget.username ?? 'User',
           otherProfilePic: ProfilePicHelper.getProfilePicUrl(
             _userProfile?.profilePic,
           ),
@@ -253,9 +307,206 @@ class _UserProfilePageState extends State<UserProfilePage> {
     final isOwnProfile = currentUser?.userId == widget.userId;
 
     return Scaffold(
-      body: CustomScrollView(
-        slivers: [
-          // App bar with profile header
+      body: _isLoading
+          ? const Center(
+              child: CircularProgressIndicator(color: Color(0xFF7ED321)),
+            )
+          : _errorMessage != null
+          ? _buildErrorState()
+          : _userProfile?.isRestricted == true
+          ? _buildPrivateProfileView()
+          : _buildFullProfileView(isOwnProfile),
+    );
+  }
+
+  Widget _buildErrorState() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.error_outline, size: 80, color: Colors.red[300]),
+            const SizedBox(height: 24),
+            const Text(
+              'Something went wrong',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              _errorMessage ?? 'Failed to load profile',
+              style: TextStyle(color: Colors.grey[600]),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: _loadProfile,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Try Again'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF7ED321),
+                foregroundColor: Colors.white,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPrivateProfileView() {
+    final displayName = _userProfile?.displayName ?? widget.username ?? 'User';
+    final currentUser = _authService.currentUser;
+    final isOwnProfile = currentUser?.userId == widget.userId;
+
+    return CustomScrollView(
+      slivers: [
+        SliverAppBar(
+          expandedHeight: 280,
+          pinned: true,
+          flexibleSpace: FlexibleSpaceBar(
+            background: Container(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Color(0xFF7ED321), Color(0xFF9AE64A)],
+                ),
+              ),
+              child: SafeArea(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const SizedBox(height: 10),
+                    CircleAvatar(
+                      radius: 50,
+                      backgroundColor: Colors.white,
+                      child: Text(
+                        displayName.isNotEmpty
+                            ? displayName[0].toUpperCase()
+                            : '?',
+                        style: const TextStyle(
+                          fontSize: 40,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF7ED321),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      displayName,
+                      style: const TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white24,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.lock, color: Colors.white, size: 16),
+                          SizedBox(width: 4),
+                          Text(
+                            'Private Profile',
+                            style: TextStyle(color: Colors.white, fontSize: 14),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              children: [
+                // Action buttons (only for other users)
+                if (!isOwnProfile) ...[
+                  Row(
+                    children: [
+                      Expanded(child: _buildFriendButton()),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed:
+                              _friendshipStatus == FriendshipStatusType.friends
+                              ? _openChat
+                              : null,
+                          icon: const Icon(Icons.chat_bubble_outline),
+                          label: const Text('Message'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: const Color(0xFF7ED321),
+                            side: const BorderSide(color: Color(0xFF7ED321)),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 32),
+                ],
+
+                // Private profile message
+                Container(
+                  padding: const EdgeInsets.all(32),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[100],
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Column(
+                    children: [
+                      Icon(
+                        Icons.lock_outline,
+                        size: 64,
+                        color: Colors.grey[400],
+                      ),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'This Profile is Private',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black87,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Send a friend request to see their runs, routes, and posts.',
+                        style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildFullProfileView(bool isOwnProfile) {
+    return NestedScrollView(
+      headerSliverBuilder: (context, innerBoxIsScrolled) {
+        return [
           SliverAppBar(
             expandedHeight: 280,
             pinned: true,
@@ -268,65 +519,81 @@ class _UserProfilePageState extends State<UserProfilePage> {
                     colors: [Color(0xFF7ED321), Color(0xFF9AE64A)],
                   ),
                 ),
-                child: SafeArea(
-                  child: _isLoading
-                      ? const Center(
-                          child: CircularProgressIndicator(color: Colors.white),
-                        )
-                      : _errorMessage != null
-                      ? _buildErrorContent()
-                      : _buildProfileHeader(),
-                ),
+                child: SafeArea(child: _buildProfileHeader()),
               ),
             ),
           ),
-
-          // Profile content
           SliverToBoxAdapter(
-            child: _isLoading
-                ? const SizedBox.shrink()
-                : _errorMessage != null
-                ? const SizedBox.shrink()
-                : _buildProfileContent(isOwnProfile),
-          ),
-        ],
-      ),
-    );
-  }
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                children: [
+                  // Action buttons
+                  if (!isOwnProfile) ...[
+                    Row(
+                      children: [
+                        Expanded(child: _buildFriendButton()),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed:
+                                _friendshipStatus ==
+                                    FriendshipStatusType.friends
+                                ? _openChat
+                                : null,
+                            icon: const Icon(Icons.chat_bubble_outline),
+                            label: const Text('Message'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: const Color(0xFF7ED321),
+                              side: const BorderSide(color: Color(0xFF7ED321)),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                  ],
 
-  Widget _buildErrorContent() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.error_outline, size: 64, color: Colors.white70),
-            const SizedBox(height: 16),
-            Text(
-              _errorMessage ?? 'Failed to load profile',
-              style: const TextStyle(color: Colors.white70, fontSize: 16),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: _loadProfile,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.white,
-                foregroundColor: const Color(0xFF7ED321),
+                ],
               ),
-              child: const Text('Retry'),
             ),
-          ],
-        ),
-      ),
+          ),
+          SliverPersistentHeader(
+            pinned: true,
+            delegate: _SliverAppBarDelegate(
+              TabBar(
+                controller: _tabController,
+                labelColor: const Color(0xFF7ED321),
+                unselectedLabelColor: Colors.grey,
+                indicatorColor: const Color(0xFF7ED321),
+                tabs: [
+                  Tab(text: 'Runs (${_userRuns.length})'),
+                  Tab(text: 'Routes (${_userRoutes.length})'),
+                  Tab(text: 'Posts (${_userPosts.length})'),
+                ],
+              ),
+            ),
+          ),
+        ];
+      },
+      body: _isLoadingData
+          ? const Center(
+              child: CircularProgressIndicator(color: Color(0xFF7ED321)),
+            )
+          : TabBarView(
+              controller: _tabController,
+              children: [_buildRunsTab(), _buildRoutesTab(), _buildPostsTab()],
+            ),
     );
   }
 
   Widget _buildProfileHeader() {
-    final displayName = _userProfile?.fullName.isNotEmpty == true
-        ? _userProfile!.fullName
-        : widget.username ?? 'User';
+    final displayName = _userProfile?.displayName ?? widget.username ?? 'User';
+    final pronouns = _userProfile?.pronouns;
 
     return SingleChildScrollView(
       child: Column(
@@ -360,13 +627,30 @@ class _UserProfilePageState extends State<UserProfilePage> {
             },
           ),
           const SizedBox(height: 12),
-          Text(
-            displayName,
-            style: const TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
-            ),
+          // Name with pronouns
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                displayName,
+                style: const TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+              if (pronouns != null && pronouns.isNotEmpty) ...[
+                const SizedBox(width: 8),
+                Text(
+                  '($pronouns)',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w400,
+                    color: Colors.white70,
+                  ),
+                ),
+              ],
+            ],
           ),
           if (_userProfile?.expertLevel != null) ...[
             const SizedBox(height: 8),
@@ -426,72 +710,225 @@ class _UserProfilePageState extends State<UserProfilePage> {
     );
   }
 
-  Widget _buildProfileContent(bool isOwnProfile) {
-    return Padding(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Action buttons (only for other users)
-          if (!isOwnProfile) ...[
-            Row(
+  Widget _buildRunsTab() {
+    if (_userRuns.isEmpty) {
+      return _buildEmptyState(
+        icon: Icons.directions_run,
+        title: 'No Runs Yet',
+        subtitle: 'This user hasn\'t recorded any runs.',
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: _userRuns.length,
+      itemBuilder: (context, index) {
+        final run = _userRuns[index];
+        return Card(
+          margin: const EdgeInsets.only(bottom: 12),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: ListTile(
+            contentPadding: const EdgeInsets.all(16),
+            leading: Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: const Color(0xFF7ED321).withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(Icons.directions_run, color: Color(0xFF7ED321)),
+            ),
+            title: Text(
+              run.formattedDate,
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(child: _buildFriendButton()),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: _friendshipStatus == FriendshipStatusType.friends
-                        ? _openChat
-                        : null,
-                    icon: const Icon(Icons.chat_bubble_outline),
-                    label: const Text('Message'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: const Color(0xFF7ED321),
-                      side: const BorderSide(color: Color(0xFF7ED321)),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                  ),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    Text(run.formattedDistance),
+                    const SizedBox(width: 16),
+                    Text(run.formattedDuration),
+                    const SizedBox(width: 16),
+                    Text(run.formattedPace),
+                  ],
                 ),
               ],
             ),
-            const SizedBox(height: 24),
-          ],
-
-          // Bio section
-          if (_userProfile?.pronouns != null) ...[
-            _buildInfoSection('Pronouns', _userProfile!.pronouns!),
-            const SizedBox(height: 16),
-          ],
-
-          // Activity section placeholder
-          const Text(
-            'Recent Activity',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: Colors.grey[100],
-              borderRadius: BorderRadius.circular(12),
+        );
+      },
+    );
+  }
+
+  Widget _buildRoutesTab() {
+    if (_userRoutes.isEmpty) {
+      return _buildEmptyState(
+        icon: Icons.route,
+        title: 'No Saved Routes',
+        subtitle: 'This user hasn\'t saved any routes.',
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: _userRoutes.length,
+      itemBuilder: (context, index) {
+        final route = _userRoutes[index];
+        return Card(
+          margin: const EdgeInsets.only(bottom: 12),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: ListTile(
+            contentPadding: const EdgeInsets.all(16),
+            leading: Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: Colors.blue.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(Icons.route, color: Colors.blue),
             ),
-            child: Center(
-              child: Column(
-                children: [
-                  Icon(Icons.directions_run, size: 48, color: Colors.grey[400]),
-                  const SizedBox(height: 12),
-                  Text(
-                    'No recent activity',
-                    style: TextStyle(fontSize: 16, color: Colors.grey[600]),
-                  ),
-                ],
+            title: Text(
+              route.title ?? 'Untitled Route',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    if (route.distanceM != null)
+                      Text(
+                        '${(route.distanceM! / 1000).toStringAsFixed(2)} km',
+                      ),
+                    if (route.difficulty != null) ...[
+                      const SizedBox(width: 16),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: _getDifficultyColor(
+                            route.difficulty!,
+                          ).withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          route.difficulty!,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: _getDifficultyColor(route.difficulty!),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Color _getDifficultyColor(String difficulty) {
+    switch (difficulty.toLowerCase()) {
+      case 'easy':
+        return Colors.green;
+      case 'medium':
+      case 'moderate':
+        return Colors.orange;
+      case 'hard':
+      case 'difficult':
+        return Colors.red;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  Widget _buildPostsTab() {
+    if (_userPosts.isEmpty) {
+      return _buildEmptyState(
+        icon: Icons.article,
+        title: 'No Posts Yet',
+        subtitle: 'This user hasn\'t shared any posts.',
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      itemCount: _userPosts.length,
+      itemBuilder: (context, index) {
+        final post = _userPosts[index];
+        // Populate author info from the profile we're viewing
+        final postWithAuthor = post.copyWith(
+          authorUsername: _userProfile?.username ?? _userProfile?.displayName,
+          authorFirstName: _userProfile?.firstName,
+          authorLastName: _userProfile?.lastName,
+          authorProfilePic: _userProfile?.profilePic,
+        );
+        return FeedPostCard(
+          post: postWithAuthor,
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) =>
+                  PostDetailScreen(postId: post.id, initialPost: postWithAuthor),
+            ),
+          ),
+          onLike: () {},
+          onComment: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) =>
+                  PostDetailScreen(postId: post.id, initialPost: postWithAuthor),
+            ),
+          ),
+          onAuthorTap: () {},
+        );
+      },
+    );
+  }
+
+  Widget _buildEmptyState({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+  }) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 64, color: Colors.grey[300]),
+            const SizedBox(height: 16),
+            Text(
+              title,
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.black87,
               ),
             ),
-          ),
-        ],
+            const SizedBox(height: 8),
+            Text(
+              subtitle,
+              style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -591,5 +1028,32 @@ class _UserProfilePageState extends State<UserProfilePage> {
         ),
       ],
     );
+  }
+}
+
+/// Delegate for pinned tab bar
+class _SliverAppBarDelegate extends SliverPersistentHeaderDelegate {
+  final TabBar _tabBar;
+
+  _SliverAppBarDelegate(this._tabBar);
+
+  @override
+  double get minExtent => _tabBar.preferredSize.height;
+
+  @override
+  double get maxExtent => _tabBar.preferredSize.height;
+
+  @override
+  Widget build(
+    BuildContext context,
+    double shrinkOffset,
+    bool overlapsContent,
+  ) {
+    return Container(color: Colors.white, child: _tabBar);
+  }
+
+  @override
+  bool shouldRebuild(_SliverAppBarDelegate oldDelegate) {
+    return false;
   }
 }

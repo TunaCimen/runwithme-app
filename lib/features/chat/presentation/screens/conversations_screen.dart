@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../auth/data/auth_service.dart';
 import '../../../friends/providers/friends_provider.dart';
 import '../../providers/chat_provider.dart';
+import '../../providers/global_chat_provider.dart';
 import '../widgets/conversation_tile.dart';
 import 'package:runwithme_app/features/chat/presentation/screens/chat_screen.dart';
 import '../../../../core/utils/profile_pic_helper.dart';
@@ -22,34 +23,29 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
   @override
   void initState() {
     super.initState();
-    debugPrint('[ConversationsScreen] initState');
 
-    _chatProvider = ChatProvider();
+    // Use global chat provider for shared WebSocket connection
+    _chatProvider = globalChatProvider;
     _friendsProvider = FriendsProvider();
 
     final token = _authService.accessToken;
     final currentUser = _authService.currentUser;
-    debugPrint('[ConversationsScreen] Token present: ${token != null}');
 
     if (token != null) {
-      _chatProvider.setAuthToken(token);
       _friendsProvider.setAuthToken(token);
 
       if (currentUser != null) {
         _friendsProvider.setCurrentUserId(currentUser.userId);
+        _chatProvider.setCurrentUserId(currentUser.userId);
       }
 
       // Use workaround: build conversations from friends list
       _loadConversationsFromFriends();
-    } else {
-      debugPrint('[ConversationsScreen] WARNING: No auth token available!');
     }
   }
 
   /// Workaround: Load friends first, then build conversations from chat history
   Future<void> _loadConversationsFromFriends() async {
-    debugPrint('[ConversationsScreen] Loading conversations from friends...');
-
     // First load friends
     await _friendsProvider.loadFriends(refresh: true);
 
@@ -59,11 +55,6 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
       await _chatProvider.buildConversationsFromFriends(
         _friendsProvider.friends,
         currentUser.userId,
-      );
-    } else {
-      // No friends, just show empty state
-      debugPrint(
-        '[ConversationsScreen] No friends to build conversations from',
       );
     }
   }

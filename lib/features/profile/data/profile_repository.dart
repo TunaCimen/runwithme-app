@@ -1,6 +1,10 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import '../../../core/models/user_profile.dart';
 import '../../../core/models/user_statistics.dart';
+import '../../../core/models/run_session.dart';
+import '../../map/data/models/route_dto.dart';
+import '../../feed/data/models/feed_post_dto.dart';
 import 'profile_api_client.dart';
 import 'image_api_client.dart';
 
@@ -243,6 +247,87 @@ class ProfileRepository {
     }
   }
 
+  /// Get user's saved routes
+  Future<UserRoutesResult> getUserRoutes(
+    String userId, {
+    required String accessToken,
+    int page = 0,
+    int size = 20,
+  }) async {
+    try {
+      final routes = await _apiClient.getUserRoutes(
+        userId,
+        accessToken: accessToken,
+        page: page,
+        size: size,
+      );
+      return UserRoutesResult.success(routes: routes);
+    } on DioException catch (e) {
+      // Handle 404 as "no routes" - not an error
+      if (e.response?.statusCode == 404) {
+        return UserRoutesResult.success(routes: []);
+      }
+      final result = _handleDioException(e, 'Failed to fetch routes');
+      return UserRoutesResult.failure(message: result.message);
+    } catch (e) {
+      return UserRoutesResult.failure(message: 'An unexpected error occurred');
+    }
+  }
+
+  /// Get user's run sessions
+  Future<UserRunsResult> getUserRunSessions(
+    String userId, {
+    required String accessToken,
+    int page = 0,
+    int size = 20,
+  }) async {
+    try {
+      final runs = await _apiClient.getUserRunSessions(
+        userId,
+        accessToken: accessToken,
+        page: page,
+        size: size,
+      );
+      return UserRunsResult.success(runs: runs);
+    } on DioException catch (e) {
+      // Handle 404 as "no runs" - not an error
+      if (e.response?.statusCode == 404) {
+        return UserRunsResult.success(runs: []);
+      }
+      final result = _handleDioException(e, 'Failed to fetch run sessions');
+      return UserRunsResult.failure(message: result.message);
+    } catch (e) {
+      return UserRunsResult.failure(message: 'An unexpected error occurred');
+    }
+  }
+
+  /// Get user's feed posts
+  Future<UserPostsResult> getUserPosts(
+    String userId, {
+    required String accessToken,
+    int page = 0,
+    int size = 20,
+  }) async {
+    try {
+      final posts = await _apiClient.getUserPosts(
+        userId,
+        accessToken: accessToken,
+        page: page,
+        size: size,
+      );
+      return UserPostsResult.success(posts: posts);
+    } on DioException catch (e) {
+      // Handle 404 as "no posts" - not an error
+      if (e.response?.statusCode == 404) {
+        return UserPostsResult.success(posts: []);
+      }
+      final result = _handleDioException(e, 'Failed to fetch posts');
+      return UserPostsResult.failure(message: result.message);
+    } catch (e) {
+      return UserPostsResult.failure(message: 'An unexpected error occurred');
+    }
+  }
+
   /// Handle Dio exceptions for profile operations
   ProfileResult _handleDioException(DioException e, String defaultMessage) {
     String errorMessage = defaultMessage;
@@ -404,5 +489,77 @@ class UserStatisticsResult {
 
   factory UserStatisticsResult.failure({required String message}) {
     return UserStatisticsResult._(success: false, message: message);
+  }
+}
+
+/// User routes result wrapper
+class UserRoutesResult {
+  final bool success;
+  final String message;
+  final List<RouteDto> routes;
+
+  const UserRoutesResult._({
+    required this.success,
+    required this.message,
+    this.routes = const [],
+  });
+
+  factory UserRoutesResult.success({
+    required List<RouteDto> routes,
+    String message = 'Success',
+  }) {
+    return UserRoutesResult._(success: true, message: message, routes: routes);
+  }
+
+  factory UserRoutesResult.failure({required String message}) {
+    return UserRoutesResult._(success: false, message: message);
+  }
+}
+
+/// User run sessions result wrapper
+class UserRunsResult {
+  final bool success;
+  final String message;
+  final List<RunSession> runs;
+
+  const UserRunsResult._({
+    required this.success,
+    required this.message,
+    this.runs = const [],
+  });
+
+  factory UserRunsResult.success({
+    required List<RunSession> runs,
+    String message = 'Success',
+  }) {
+    return UserRunsResult._(success: true, message: message, runs: runs);
+  }
+
+  factory UserRunsResult.failure({required String message}) {
+    return UserRunsResult._(success: false, message: message);
+  }
+}
+
+/// User posts result wrapper
+class UserPostsResult {
+  final bool success;
+  final String message;
+  final List<FeedPostDto> posts;
+
+  const UserPostsResult._({
+    required this.success,
+    required this.message,
+    this.posts = const [],
+  });
+
+  factory UserPostsResult.success({
+    required List<FeedPostDto> posts,
+    String message = 'Success',
+  }) {
+    return UserPostsResult._(success: true, message: message, posts: posts);
+  }
+
+  factory UserPostsResult.failure({required String message}) {
+    return UserPostsResult._(success: false, message: message);
   }
 }

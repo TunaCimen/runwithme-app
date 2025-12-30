@@ -3,24 +3,25 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import '../../../../core/utils/profile_pic_helper.dart';
+import '../../../../core/widgets/highlighted_text.dart';
 import '../../data/models/feed_post_dto.dart';
 
 /// Card widget for displaying a feed post
 class FeedPostCard extends StatelessWidget {
   final FeedPostDto post;
+  final String? searchQuery;
   final VoidCallback? onTap;
   final VoidCallback? onLike;
   final VoidCallback? onComment;
-  final VoidCallback? onShare;
   final VoidCallback? onAuthorTap;
 
   const FeedPostCard({
     super.key,
     required this.post,
+    this.searchQuery,
     this.onTap,
     this.onLike,
     this.onComment,
-    this.onShare,
     this.onAuthorTap,
   });
 
@@ -52,7 +53,7 @@ class FeedPostCard extends StatelessWidget {
               _buildRoutePreview(),
             // Show photo if mediaUrl is present (for any post type)
             if (post.mediaUrl != null && post.mediaUrl!.isNotEmpty)
-              _buildPhoto(),
+              _buildPhoto(context),
             // Show stats for run/route type posts
             if (post.postType == PostType.run ||
                 post.postType == PostType.route)
@@ -103,11 +104,16 @@ class FeedPostCard extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      Text(
-                        post.authorDisplayName,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 15,
+                      Flexible(
+                        child: HighlightedText(
+                          text: post.authorDisplayName,
+                          searchQuery: searchQuery,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 15,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -201,8 +207,9 @@ class FeedPostCard extends StatelessWidget {
   Widget _buildContent() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Text(
-        post.textContent!,
+      child: HighlightedText(
+        text: post.textContent!,
+        searchQuery: searchQuery,
         style: const TextStyle(fontSize: 15, height: 1.4),
       ),
     );
@@ -220,8 +227,9 @@ class FeedPostCard extends StatelessWidget {
           ),
           const SizedBox(width: 8),
           Expanded(
-            child: Text(
-              post.displayTitle,
+            child: HighlightedText(
+              text: post.displayTitle,
+              searchQuery: searchQuery,
               style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -233,34 +241,10 @@ class FeedPostCard extends StatelessWidget {
   }
 
   Widget _buildRoutePreview() {
-    // Debug logging for route points analysis
-    debugPrint('[FeedPostCard] Route preview for post ${post.id}:');
-    debugPrint('[FeedPostCard]   postType: ${post.postType}');
-    debugPrint(
-      '[FeedPostCard]   routeId: ${post.routeId}, runSessionId: ${post.runSessionId}',
-    );
-    debugPrint(
-      '[FeedPostCard]   routePoints: ${post.routePoints?.length ?? 0} points',
-    );
-    debugPrint(
-      '[FeedPostCard]   startPoint: (${post.startPointLat}, ${post.startPointLon})',
-    );
-    debugPrint(
-      '[FeedPostCard]   endPoint: (${post.endPointLat}, ${post.endPointLon})',
-    );
-    if (post.routePoints != null && post.routePoints!.isNotEmpty) {
-      debugPrint('[FeedPostCard]   First point: ${post.routePoints!.first}');
-      debugPrint('[FeedPostCard]   Last point: ${post.routePoints!.last}');
-    }
-
     // Check if we have route points to display
     final hasPoints = post.routePoints != null && post.routePoints!.length > 1;
     final hasCoordinates =
         post.startPointLat != null && post.startPointLon != null;
-
-    debugPrint(
-      '[FeedPostCard]   hasPoints: $hasPoints, hasCoordinates: $hasCoordinates',
-    );
 
     if (!hasPoints && !hasCoordinates) {
       // Show placeholder if no coordinates available
@@ -439,50 +423,64 @@ class FeedPostCard extends StatelessWidget {
     return 9.0;
   }
 
-  Widget _buildPhoto() {
-    debugPrint('[FeedPostCard] Raw mediaUrl: ${post.mediaUrl}');
+  Widget _buildPhoto(BuildContext context) {
     final imageUrl = post.getFullMediaUrl();
-    debugPrint('[FeedPostCard] Full imageUrl: $imageUrl');
     if (imageUrl == null) return const SizedBox.shrink();
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(12),
-        child: Image.network(
-          imageUrl,
-          height: 200,
-          width: double.infinity,
-          fit: BoxFit.cover,
-          loadingBuilder: (context, child, loadingProgress) {
-            if (loadingProgress == null) return child;
-            return Container(
-              height: 200,
-              color: Colors.grey[200],
-              child: Center(
-                child: CircularProgressIndicator(
-                  value: loadingProgress.expectedTotalBytes != null
-                      ? loadingProgress.cumulativeBytesLoaded /
-                            loadingProgress.expectedTotalBytes!
-                      : null,
-                  color: const Color(0xFF7ED321),
+      child: GestureDetector(
+        onTap: () => _showFullScreenImage(context, imageUrl),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: Image.network(
+            imageUrl,
+            height: 200,
+            width: double.infinity,
+            fit: BoxFit.cover,
+            loadingBuilder: (context, child, loadingProgress) {
+              if (loadingProgress == null) return child;
+              return Container(
+                height: 200,
+                color: Colors.grey[200],
+                child: Center(
+                  child: CircularProgressIndicator(
+                    value: loadingProgress.expectedTotalBytes != null
+                        ? loadingProgress.cumulativeBytesLoaded /
+                              loadingProgress.expectedTotalBytes!
+                        : null,
+                    color: const Color(0xFF7ED321),
+                  ),
                 ),
-              ),
-            );
-          },
-          errorBuilder: (context, error, stackTrace) {
-            debugPrint(
-              '[FeedPostCard] Image load error: $error for URL: $imageUrl',
-            );
-            return Container(
-              height: 200,
-              color: Colors.grey[200],
-              child: const Center(
-                child: Icon(Icons.broken_image, size: 48, color: Colors.grey),
-              ),
-            );
-          },
+              );
+            },
+            errorBuilder: (context, error, stackTrace) {
+              return Container(
+                height: 200,
+                color: Colors.grey[200],
+                child: const Center(
+                  child: Icon(Icons.broken_image, size: 48, color: Colors.grey),
+                ),
+              );
+            },
+          ),
         ),
+      ),
+    );
+  }
+
+  void _showFullScreenImage(BuildContext context, String imageUrl) {
+    Navigator.of(context).push(
+      PageRouteBuilder(
+        opaque: false,
+        barrierColor: Colors.black87,
+        barrierDismissible: true,
+        pageBuilder: (context, animation, secondaryAnimation) {
+          return FadeTransition(
+            opacity: animation,
+            child: _FullScreenImageView(imageUrl: imageUrl),
+          );
+        },
       ),
     );
   }
@@ -544,11 +542,6 @@ class FeedPostCard extends StatelessWidget {
             label: '${post.commentsCount}',
             color: Colors.grey[700]!,
             onTap: onComment,
-          ),
-          const Spacer(),
-          IconButton(
-            icon: Icon(Icons.share_outlined, color: Colors.grey[700]),
-            onPressed: onShare,
           ),
         ],
       ),
@@ -662,4 +655,69 @@ class _RoutePathPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(CustomPainter oldDelegate) => false;
+}
+
+/// Full screen image viewer with pinch-to-zoom
+class _FullScreenImageView extends StatelessWidget {
+  final String imageUrl;
+
+  const _FullScreenImageView({required this.imageUrl});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      body: GestureDetector(
+        onTap: () => Navigator.of(context).pop(),
+        child: Stack(
+          children: [
+            // Full screen interactive image
+            Center(
+              child: InteractiveViewer(
+                minScale: 0.5,
+                maxScale: 4.0,
+                child: Image.network(
+                  imageUrl,
+                  fit: BoxFit.contain,
+                  loadingBuilder: (context, child, loadingProgress) {
+                    if (loadingProgress == null) return child;
+                    return Center(
+                      child: CircularProgressIndicator(
+                        value: loadingProgress.expectedTotalBytes != null
+                            ? loadingProgress.cumulativeBytesLoaded /
+                                  loadingProgress.expectedTotalBytes!
+                            : null,
+                        color: const Color(0xFF7ED321),
+                      ),
+                    );
+                  },
+                  errorBuilder: (context, error, stackTrace) {
+                    return const Center(
+                      child: Icon(
+                        Icons.broken_image,
+                        size: 64,
+                        color: Colors.white54,
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
+            // Close button
+            Positioned(
+              top: MediaQuery.of(context).padding.top + 16,
+              right: 16,
+              child: IconButton(
+                onPressed: () => Navigator.of(context).pop(),
+                icon: const Icon(Icons.close, color: Colors.white, size: 28),
+                style: IconButton.styleFrom(
+                  backgroundColor: Colors.black45,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }

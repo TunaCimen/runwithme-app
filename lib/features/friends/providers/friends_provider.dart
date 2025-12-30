@@ -6,8 +6,8 @@ import '../data/models/friendship_dto.dart';
 import '../../profile/data/profile_repository.dart';
 import '../../../core/models/user_profile.dart';
 
-// Debug flag
-const bool _debugFriends = true;
+// Debug flag - set to false for production
+const bool _debugFriends = false;
 void _log(String message) {
   if (_debugFriends) {
     debugPrint('[FriendsProvider] $message');

@@ -22,10 +22,10 @@ class _EditProfilePageState extends State<EditProfilePage> {
 
   late TextEditingController _firstNameController;
   late TextEditingController _lastNameController;
-  late TextEditingController _pronounsController;
 
   DateTime? _birthday;
   String? _expertLevel;
+  String? _pronouns;
   bool _profileVisibility = true;
   bool _isLoading = false;
   bool _isUploadingImage = false;
@@ -41,6 +41,12 @@ class _EditProfilePageState extends State<EditProfilePage> {
     'Expert',
   ];
 
+  final List<String> _pronounOptions = [
+    'he/him',
+    'she/her',
+    'they/them',
+  ];
+
   @override
   void initState() {
     super.initState();
@@ -50,12 +56,15 @@ class _EditProfilePageState extends State<EditProfilePage> {
     _lastNameController = TextEditingController(
       text: widget.existingProfile?.lastName ?? '',
     );
-    _pronounsController = TextEditingController(
-      text: widget.existingProfile?.pronouns ?? '',
-    );
     _birthday = widget.existingProfile?.birthday;
     _expertLevel = widget.existingProfile?.expertLevel ?? 'Beginner';
     _profileVisibility = widget.existingProfile?.profileVisibility ?? true;
+
+    // Set pronouns from existing profile (only if it matches one of the options)
+    final existingPronouns = widget.existingProfile?.pronouns;
+    if (existingPronouns != null && _pronounOptions.contains(existingPronouns)) {
+      _pronouns = existingPronouns;
+    }
 
     // Load existing profile picture URL
     if (widget.existingProfile?.profilePic != null) {
@@ -77,7 +86,6 @@ class _EditProfilePageState extends State<EditProfilePage> {
   void dispose() {
     _firstNameController.dispose();
     _lastNameController.dispose();
-    _pronounsController.dispose();
     super.dispose();
   }
 
@@ -262,9 +270,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
       userId: user.userId,
       firstName: _firstNameController.text.trim(),
       lastName: _lastNameController.text.trim(),
-      pronouns: _pronounsController.text.trim().isEmpty
-          ? null
-          : _pronounsController.text.trim(),
+      pronouns: _pronouns,
       birthday: _birthday,
       expertLevel: _expertLevel,
       profileVisibility: _profileVisibility,
@@ -450,16 +456,33 @@ class _EditProfilePageState extends State<EditProfilePage> {
                 const SizedBox(height: 16),
 
                 // Pronouns (Optional)
-                TextFormField(
-                  controller: _pronounsController,
+                DropdownButtonFormField<String>(
+                  value: _pronouns,
                   decoration: InputDecoration(
                     labelText: 'Pronouns (Optional)',
-                    hintText: 'e.g., she/her, he/him, they/them',
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
                     prefixIcon: const Icon(Icons.wc),
                   ),
+                  hint: const Text('Select pronouns'),
+                  items: [
+                    const DropdownMenuItem<String>(
+                      value: null,
+                      child: Text('Prefer not to say'),
+                    ),
+                    ..._pronounOptions.map((pronoun) {
+                      return DropdownMenuItem(
+                        value: pronoun,
+                        child: Text(pronoun),
+                      );
+                    }),
+                  ],
+                  onChanged: (value) {
+                    setState(() {
+                      _pronouns = value;
+                    });
+                  },
                 ),
                 const SizedBox(height: 16),
 

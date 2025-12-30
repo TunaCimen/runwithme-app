@@ -1,44 +1,122 @@
-import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import '../../../core/models/route.dart' as route_model;
 import '../../../core/models/user_profile.dart';
 import '../../../core/utils/profile_pic_helper.dart';
+import '../../../core/widgets/highlighted_text.dart';
+import '../../../core/widgets/user_search_card.dart';
 import '../../auth/data/auth_service.dart';
 import '../../map/data/route_repository.dart';
 import '../../profile/data/profile_repository.dart';
 import '../../profile/presentation/user_profile_page.dart';
+import '../../friends/providers/friends_provider.dart';
 import '../../survey/data/survey_repository.dart';
 import '../../survey/data/models/survey_response_dto.dart';
 import '../../survey/presentation/questionnaire_screen.dart';
+import '../../recommendations/data/recommendations_repository.dart';
+import '../../recommendations/data/models/recommendation_dto.dart';
 
 typedef RunRoute = route_model.Route;
 
 /// Model for a matched user with their match score
 class MatchedUser {
-  final UserProfile profile;
+  final String userId;
+  final String? username;
+  final String? profilePic;
   final int matchScore; // 0-100
+  final double routeSimilarityScore;
+  final double preferenceSimilarityScore;
+  final int routePairCount;
+  final bool hasRoutes;
+  final bool hasSurvey;
   final List<RunRoute> routes;
+  final UserProfile? profile;
 
   MatchedUser({
-    required this.profile,
+    required this.userId,
+    this.username,
+    this.profilePic,
     required this.matchScore,
+    this.routeSimilarityScore = 0,
+    this.preferenceSimilarityScore = 0,
+    this.routePairCount = 0,
+    this.hasRoutes = false,
+    this.hasSurvey = false,
     this.routes = const [],
+    this.profile,
   });
 
+  /// Create from RecommendationDto
+  factory MatchedUser.fromRecommendation(RecommendationDto rec) {
+    return MatchedUser(
+      userId: rec.userId,
+      username: rec.username,
+      profilePic: rec.profilePic,
+      matchScore: rec.matchPercentage,
+      routeSimilarityScore: rec.routeSimilarityScore,
+      preferenceSimilarityScore: rec.preferenceSimilarityScore,
+      routePairCount: rec.routePairCount,
+      hasRoutes: rec.hasRoutes,
+      hasSurvey: rec.hasSurvey,
+    );
+  }
+
   String get displayName {
-    if (profile.firstName != null && profile.firstName!.isNotEmpty) {
-      return profile.firstName!;
+    if (profile?.firstName != null && profile!.firstName!.isNotEmpty) {
+      return profile!.firstName!;
     }
-    return profile.fullName.isNotEmpty
-        ? profile.fullName.split(' ').first
-        : 'Runner';
+    if (profile?.fullName != null && profile!.fullName.isNotEmpty) {
+      return profile!.fullName.split(' ').first;
+    }
+    if (username != null && username!.isNotEmpty) {
+      return username!;
+    }
+    return 'Runner';
+  }
+
+  String get fullDisplayName {
+    if (profile?.fullName != null && profile!.fullName.isNotEmpty) {
+      return profile!.fullName;
+    }
+    return username ?? 'Runner';
+  }
+
+  /// Create a copy with updated fields
+  MatchedUser copyWith({
+    String? userId,
+    String? username,
+    String? profilePic,
+    int? matchScore,
+    double? routeSimilarityScore,
+    double? preferenceSimilarityScore,
+    int? routePairCount,
+    bool? hasRoutes,
+    bool? hasSurvey,
+    List<RunRoute>? routes,
+    UserProfile? profile,
+  }) {
+    return MatchedUser(
+      userId: userId ?? this.userId,
+      username: username ?? this.username,
+      profilePic: profilePic ?? this.profilePic,
+      matchScore: matchScore ?? this.matchScore,
+      routeSimilarityScore: routeSimilarityScore ?? this.routeSimilarityScore,
+      preferenceSimilarityScore:
+          preferenceSimilarityScore ?? this.preferenceSimilarityScore,
+      routePairCount: routePairCount ?? this.routePairCount,
+      hasRoutes: hasRoutes ?? this.hasRoutes,
+      hasSurvey: hasSurvey ?? this.hasSurvey,
+      routes: routes ?? this.routes,
+      profile: profile ?? this.profile,
+    );
   }
 }
 
 class MatchesTab extends StatefulWidget {
-  const MatchesTab({super.key});
+  final String? searchQuery;
+
+  const MatchesTab({super.key, this.searchQuery});
 
   @override
   State<MatchesTab> createState() => _MatchesTabState();
@@ -49,7 +127,9 @@ class _MatchesTabState extends State<MatchesTab> {
   final AuthService _authService = AuthService();
   final ProfileRepository _profileRepository = ProfileRepository();
   final SurveyRepository _surveyRepository = SurveyRepository.instance;
-  final Random _random = Random();
+  final RecommendationsRepository _recommendationsRepository =
+      RecommendationsRepository();
+  late FriendsProvider _friendsProvider;
 
   List<RunRoute> _publicRoutes = [];
   List<MatchedUser> _matchedUsers = [];
@@ -71,10 +151,38 @@ class _MatchesTabState extends State<MatchesTab> {
   // Creator profiles cache
   final Map<String, UserProfile> _creatorProfiles = {};
 
+  // User search state for non-matched users
+  List<UserProfile> _searchedUsers = [];
+  bool _isSearchingUsers = false;
+  final Map<String, UserFriendshipStatus> _friendshipStatuses = {};
+  final Set<String> _loadingFriendRequests = {};
+  String? _lastSearchQuery;
+
   @override
   void initState() {
     super.initState();
+    _friendsProvider = FriendsProvider();
+
+    final token = _authService.accessToken;
+    final currentUser = _authService.currentUser;
+    if (token != null) {
+      _friendsProvider.setAuthToken(token);
+      if (currentUser != null) {
+        _friendsProvider.setCurrentUserId(currentUser.userId);
+      }
+      _friendsProvider.loadAll();
+    }
+
     _loadData();
+  }
+
+  @override
+  void didUpdateWidget(MatchesTab oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Search for users when search query changes
+    if (widget.searchQuery != oldWidget.searchQuery) {
+      _searchAllUsers(widget.searchQuery ?? '');
+    }
   }
 
   /// Load both users and routes
@@ -145,34 +253,194 @@ class _MatchesTabState extends State<MatchesTab> {
     }
   }
 
-  /// Load matched users from backend
+  /// Load matched users from recommendations API
   Future<void> _loadMatchedUsers({bool forceRefresh = false}) async {
     final accessToken = _authService.accessToken;
     if (accessToken == null) return;
 
-    final currentUserId = _authService.currentUser?.userId;
+    if (forceRefresh) {
+      _recommendationsRepository.clearCache();
+    }
 
-    final result = await _profileRepository.getAllProfiles(
+    final result = await _recommendationsRepository.getRecommendations(
       accessToken: accessToken,
       page: 0,
       size: 20,
+      locationLevel: LocationLevel.city,
       forceRefresh: forceRefresh,
     );
 
     if (result.success) {
-      // Filter out current user and create matched users with random scores
-      final profiles = result.profiles
-          .where((p) => p.userId != currentUserId)
+      // Convert recommendations to MatchedUser
+      _matchedUsers = result.recommendations
+          .map((rec) => MatchedUser.fromRecommendation(rec))
           .toList();
-
-      _matchedUsers = profiles.map((profile) {
-        // Generate random match score between 75-99 for demo
-        final matchScore = 75 + _random.nextInt(25);
-        return MatchedUser(profile: profile, matchScore: matchScore);
-      }).toList();
 
       // Sort by match score (highest first)
       _matchedUsers.sort((a, b) => b.matchScore.compareTo(a.matchScore));
+
+      // Load profiles for matched users
+      _loadMatchedUserProfiles(forceRefresh: forceRefresh);
+    } else {
+      _errorMessage = result.message;
+    }
+  }
+
+  /// Load profiles for matched users to get full name, etc.
+  Future<void> _loadMatchedUserProfiles({bool forceRefresh = false}) async {
+    final accessToken = _authService.accessToken;
+    if (accessToken == null) return;
+
+    for (var i = 0; i < _matchedUsers.length; i++) {
+      final user = _matchedUsers[i];
+
+      // Check if we already have the profile cached
+      if (!forceRefresh && _creatorProfiles.containsKey(user.userId)) {
+        _matchedUsers[i] = user.copyWith(
+          profile: _creatorProfiles[user.userId],
+        );
+        continue;
+      }
+
+      final result = await _profileRepository.getProfile(
+        user.userId,
+        accessToken: accessToken,
+        forceRefresh: forceRefresh,
+      );
+
+      if (result.success && result.profile != null) {
+        // Cache the profile
+        _creatorProfiles[user.userId] = result.profile!;
+
+        // Update the matched user with profile
+        if (mounted) {
+          setState(() {
+            _matchedUsers[i] = user.copyWith(profile: result.profile);
+          });
+        }
+      }
+    }
+  }
+
+  /// Search all users when matched users search returns no results
+  Future<void> _searchAllUsers(String query) async {
+    if (query.isEmpty) {
+      setState(() {
+        _searchedUsers = [];
+        _lastSearchQuery = null;
+      });
+      return;
+    }
+
+    // Don't re-search if same query
+    if (query == _lastSearchQuery) return;
+    _lastSearchQuery = query;
+
+    setState(() => _isSearchingUsers = true);
+
+    final accessToken = _authService.accessToken;
+    final currentUserId = _authService.currentUser?.userId;
+    if (accessToken == null) {
+      setState(() => _isSearchingUsers = false);
+      return;
+    }
+
+    try {
+      final result = await _profileRepository.getAllProfiles(
+        accessToken: accessToken,
+        page: 0,
+        size: 50,
+      );
+
+      if (result.success) {
+        final lowerQuery = query.toLowerCase();
+        // Get IDs of matched users to exclude them
+        final matchedUserIds = _matchedUsers.map((u) => u.userId).toSet();
+
+        final filteredUsers = result.profiles.where((profile) {
+          // Exclude current user
+          if (profile.userId == currentUserId) return false;
+          // Exclude already matched users
+          if (matchedUserIds.contains(profile.userId)) return false;
+
+          // Search in name
+          final fullName = profile.fullName.toLowerCase();
+          if (fullName.contains(lowerQuery)) return true;
+
+          final firstName = profile.firstName?.toLowerCase() ?? '';
+          if (firstName.contains(lowerQuery)) return true;
+
+          final lastName = profile.lastName?.toLowerCase() ?? '';
+          if (lastName.contains(lowerQuery)) return true;
+
+          final username = profile.username?.toLowerCase() ?? '';
+          if (username.contains(lowerQuery)) return true;
+
+          return false;
+        }).toList();
+
+        // Update friendship statuses
+        for (final user in filteredUsers) {
+          _friendshipStatuses[user.userId] = _getFriendshipStatus(user.userId);
+        }
+
+        if (mounted) {
+          setState(() {
+            _searchedUsers = filteredUsers;
+            _isSearchingUsers = false;
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isSearchingUsers = false);
+      }
+    }
+  }
+
+  /// Get friendship status for a user
+  UserFriendshipStatus _getFriendshipStatus(String userId) {
+    if (_friendsProvider.isFriend(userId)) {
+      return UserFriendshipStatus.friends;
+    }
+    if (_friendsProvider.hasPendingSentRequest(userId)) {
+      return UserFriendshipStatus.pendingSent;
+    }
+    if (_friendsProvider.hasPendingReceivedRequest(userId)) {
+      return UserFriendshipStatus.pendingReceived;
+    }
+    return UserFriendshipStatus.none;
+  }
+
+  /// Send friend request
+  Future<void> _sendFriendRequest(String userId) async {
+    setState(() => _loadingFriendRequests.add(userId));
+
+    final result = await _friendsProvider.sendRequest(receiverId: userId);
+
+    if (mounted) {
+      setState(() {
+        _loadingFriendRequests.remove(userId);
+        if (result.success) {
+          _friendshipStatuses[userId] = UserFriendshipStatus.pendingSent;
+        }
+      });
+
+      if (result.success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Friend request sent!'),
+            backgroundColor: Color(0xFF7ED321),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(result.message ?? 'Failed to send request'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -206,32 +474,81 @@ class _MatchesTabState extends State<MatchesTab> {
   void _assignRoutesToUsers() {
     for (var i = 0; i < _matchedUsers.length; i++) {
       final userRoutes = _publicRoutes
-          .where((r) => r.creatorId == _matchedUsers[i].profile.userId)
+          .where((r) => r.creatorId == _matchedUsers[i].userId)
           .toList();
 
-      _matchedUsers[i] = MatchedUser(
-        profile: _matchedUsers[i].profile,
-        matchScore: _matchedUsers[i].matchScore,
-        routes: userRoutes,
-      );
+      _matchedUsers[i] = _matchedUsers[i].copyWith(routes: userRoutes);
     }
   }
 
-  /// Get filtered routes based on selected user
+  /// Get search query from widget
+  String get _searchQuery => widget.searchQuery?.trim() ?? '';
+
+  /// Filter matched users based on search query
+  List<MatchedUser> get _filteredMatchedUsers {
+    if (_searchQuery.isEmpty) return _matchedUsers;
+
+    final query = _searchQuery.toLowerCase();
+    return _matchedUsers.where((user) {
+      // Search in username
+      final username = user.username?.toLowerCase() ?? '';
+      if (username.contains(query)) return true;
+
+      // Search in user's full name (from profile)
+      final fullName = user.profile?.fullName.toLowerCase() ?? '';
+      if (fullName.contains(query)) return true;
+
+      // Search in user's first name
+      final firstName = user.profile?.firstName?.toLowerCase() ?? '';
+      if (firstName.contains(query)) return true;
+
+      // Search in user's last name
+      final lastName = user.profile?.lastName?.toLowerCase() ?? '';
+      if (lastName.contains(query)) return true;
+
+      return false;
+    }).toList();
+  }
+
+  /// Get filtered routes based on selected user and search query
   List<RunRoute> get _filteredRoutes {
+    List<RunRoute> routes;
     if (_selectedUserId == null) {
-      return _publicRoutes;
+      routes = _publicRoutes;
+    } else {
+      routes = _publicRoutes
+          .where((r) => r.creatorId == _selectedUserId)
+          .toList();
     }
-    return _publicRoutes.where((r) => r.creatorId == _selectedUserId).toList();
+
+    if (_searchQuery.isEmpty) return routes;
+
+    final query = _searchQuery.toLowerCase();
+    return routes.where((route) {
+      // Search in route title
+      final title = route.title?.toLowerCase() ?? '';
+      if (title.contains(query)) return true;
+
+      // Search in route description
+      final description = route.description?.toLowerCase() ?? '';
+      if (description.contains(query)) return true;
+
+      // Search in creator name
+      final creatorProfile = _creatorProfiles[route.creatorId];
+      if (creatorProfile != null) {
+        final creatorName = creatorProfile.fullName.toLowerCase();
+        if (creatorName.contains(query)) return true;
+      }
+
+      return false;
+    }).toList();
   }
 
   /// Get selected matched user
   MatchedUser? get _selectedMatchedUser {
     if (_selectedUserId == null) return null;
     try {
-      return _matchedUsers.firstWhere(
-        (u) => u.profile.userId == _selectedUserId,
-      );
+      return _matchedUsers.firstWhere((u) => u.userId == _selectedUserId);
     } catch (_) {
       return null;
     }
@@ -348,13 +665,15 @@ class _MatchesTabState extends State<MatchesTab> {
   }
 
   /// Navigate to user profile
-  void _navigateToUserProfile(String userId) {
+  void _navigateToUserProfile(String userId, {String? username}) {
     final profile = _creatorProfiles[userId];
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) =>
-            UserProfilePage(userId: userId, username: profile?.fullName),
+        builder: (context) => UserProfilePage(
+          userId: userId,
+          username: profile?.fullName ?? username,
+        ),
       ),
     );
   }
@@ -446,6 +765,10 @@ class _MatchesTabState extends State<MatchesTab> {
             const SizedBox(height: 16),
           ],
 
+          // User search results (when searching and found non-matched users)
+          if (_searchQuery.isNotEmpty && _searchedUsers.isNotEmpty)
+            _buildUserSearchResults(),
+
           // Route cards
           if (_filteredRoutes.isEmpty)
             _buildEmptyRoutesState()
@@ -462,25 +785,90 @@ class _MatchesTabState extends State<MatchesTab> {
   }
 
   Widget _buildMatchedUsersCircles() {
+    final usersToShow = _filteredMatchedUsers;
+
     return SizedBox(
       height: 110,
       child: ListView(
         scrollDirection: Axis.horizontal,
         children: [
-          // "All" button
-          Padding(
-            padding: const EdgeInsets.only(right: 12),
-            child: _buildAllButton(),
-          ),
+          // "All" button (only show if no search or search matches routes)
+          if (_searchQuery.isEmpty)
+            Padding(
+              padding: const EdgeInsets.only(right: 12),
+              child: _buildAllButton(),
+            ),
           // Matched user circles
-          ..._matchedUsers.map(
+          ...usersToShow.map(
             (user) => Padding(
               padding: const EdgeInsets.only(right: 12),
               child: _buildUserCircle(user),
             ),
           ),
+          // Show no users message if search yields no results in matches
+          if (usersToShow.isEmpty && _searchQuery.isNotEmpty && _searchedUsers.isEmpty)
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: _isSearchingUsers
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Color(0xFF7ED321),
+                        ),
+                      )
+                    : Text(
+                        'No users match "$_searchQuery"',
+                        style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                      ),
+              ),
+            ),
         ],
       ),
+    );
+  }
+
+  /// Build user search results section for non-matched users
+  Widget _buildUserSearchResults() {
+    if (_searchedUsers.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(0, 8, 0, 12),
+          child: Row(
+            children: [
+              Icon(Icons.people_outline, size: 18, color: Colors.grey[600]),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Other users matching "$_searchQuery"',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.grey[600],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        ..._searchedUsers.map((user) => Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: UserSearchCard(
+                profile: user,
+                searchQuery: _searchQuery,
+                friendshipStatus: _friendshipStatuses[user.userId] ??
+                    UserFriendshipStatus.none,
+                isLoading: _loadingFriendRequests.contains(user.userId),
+                onTap: () => _navigateToUserProfile(user.userId),
+                onSendRequest: () => _sendFriendRequest(user.userId),
+              ),
+            )),
+      ],
     );
   }
 
@@ -536,15 +924,16 @@ class _MatchesTabState extends State<MatchesTab> {
   }
 
   Widget _buildUserCircle(MatchedUser user) {
-    final isSelected = _selectedUserId == user.profile.userId;
+    final isSelected = _selectedUserId == user.userId;
+    // Get profile pic from either MatchedUser or cached profile
     final profilePicUrl = ProfilePicHelper.getProfilePicUrl(
-      user.profile.profilePic,
+      user.profilePic ?? user.profile?.profilePic,
     );
 
     return GestureDetector(
       onTap: () {
         setState(() {
-          _selectedUserId = user.profile.userId;
+          _selectedUserId = user.userId;
         });
       },
       child: Column(
@@ -637,17 +1026,37 @@ class _MatchesTabState extends State<MatchesTab> {
           const SizedBox(height: 6),
           SizedBox(
             width: 68,
-            child: Text(
-              user.displayName,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-                color: isSelected ? const Color(0xFF7ED321) : Colors.black87,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-            ),
+            child: _searchQuery.isNotEmpty
+                ? HighlightedText(
+                    text: user.displayName,
+                    searchQuery: _searchQuery,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: isSelected
+                          ? FontWeight.w600
+                          : FontWeight.w500,
+                      color: isSelected
+                          ? const Color(0xFF7ED321)
+                          : Colors.black87,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  )
+                : Text(
+                    user.displayName,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: isSelected
+                          ? FontWeight.w600
+                          : FontWeight.w500,
+                      color: isSelected
+                          ? const Color(0xFF7ED321)
+                          : Colors.black87,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                  ),
           ),
         ],
       ),
@@ -663,7 +1072,7 @@ class _MatchesTabState extends State<MatchesTab> {
 
   Widget _buildSelectedUserCard(MatchedUser user) {
     final profilePicUrl = ProfilePicHelper.getProfilePicUrl(
-      user.profile.profilePic,
+      user.profilePic ?? user.profile?.profilePic,
     );
 
     return Container(
@@ -686,7 +1095,10 @@ class _MatchesTabState extends State<MatchesTab> {
             children: [
               // Profile picture
               GestureDetector(
-                onTap: () => _navigateToUserProfile(user.profile.userId),
+                onTap: () => _navigateToUserProfile(
+                  user.userId,
+                  username: user.fullDisplayName,
+                ),
                 child: CircleAvatar(
                   radius: 30,
                   backgroundColor: const Color(0xFF7ED321),
@@ -713,16 +1125,14 @@ class _MatchesTabState extends State<MatchesTab> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      user.profile.fullName.isNotEmpty
-                          ? user.profile.fullName
-                          : 'Runner',
+                      user.fullDisplayName,
                       style: const TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
                     Text(
-                      '${user.routes.length} ${user.routes.length == 1 ? 'route' : 'routes'} shared',
+                      _buildMatchSubtitle(user),
                       style: TextStyle(fontSize: 14, color: Colors.grey[600]),
                     ),
                   ],
@@ -766,7 +1176,7 @@ class _MatchesTabState extends State<MatchesTab> {
             ],
           ),
           const SizedBox(height: 16),
-          // Stats row
+          // Similarity breakdown
           Container(
             padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
             decoration: BoxDecoration(
@@ -777,24 +1187,39 @@ class _MatchesTabState extends State<MatchesTab> {
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
                 _buildMiniStat(
-                  icon: Icons.speed,
-                  value: _generateDummyPace(),
-                  label: 'Avg Pace',
+                  icon: Icons.route,
+                  value: '${user.routeSimilarityScore.round()}%',
+                  label: 'Route Match',
                 ),
                 Container(width: 1, height: 30, color: Colors.grey[300]),
                 _buildMiniStat(
-                  icon: Icons.calendar_today,
-                  value: _generateDummyWeeklyDistance(),
-                  label: 'Per Week',
+                  icon: Icons.tune,
+                  value: '${user.preferenceSimilarityScore.round()}%',
+                  label: 'Preferences',
                 ),
                 Container(width: 1, height: 30, color: Colors.grey[300]),
                 _buildMiniStat(
-                  icon: Icons.wb_sunny,
-                  value: _generateDummyTimePreference(),
-                  label: 'Prefers',
+                  icon: Icons.compare_arrows,
+                  value: '${user.routePairCount}',
+                  label: 'Route Pairs',
                 ),
               ],
             ),
+          ),
+          const SizedBox(height: 8),
+          // Info badges
+          Wrap(
+            spacing: 8,
+            children: [
+              if (user.hasRoutes)
+                _buildInfoBadge(Icons.map_outlined, 'Has Routes', Colors.blue),
+              if (user.hasSurvey)
+                _buildInfoBadge(
+                  Icons.assignment_turned_in,
+                  'Survey Done',
+                  Colors.green,
+                ),
+            ],
           ),
           const SizedBox(height: 12),
           // Action buttons
@@ -802,7 +1227,10 @@ class _MatchesTabState extends State<MatchesTab> {
             children: [
               Expanded(
                 child: OutlinedButton.icon(
-                  onPressed: () => _navigateToUserProfile(user.profile.userId),
+                  onPressed: () => _navigateToUserProfile(
+                    user.userId,
+                    username: user.fullDisplayName,
+                  ),
                   icon: const Icon(Icons.person_outline, size: 18),
                   label: const Text('View Profile'),
                   style: OutlinedButton.styleFrom(
@@ -843,6 +1271,40 @@ class _MatchesTabState extends State<MatchesTab> {
     );
   }
 
+  String _buildMatchSubtitle(MatchedUser user) {
+    final parts = <String>[];
+    if (user.routes.isNotEmpty) {
+      parts.add(
+        '${user.routes.length} ${user.routes.length == 1 ? 'route' : 'routes'}',
+      );
+    }
+    if (user.routePairCount > 0) {
+      parts.add('${user.routePairCount} similar routes');
+    }
+    if (parts.isEmpty) {
+      parts.add('New match');
+    }
+    return parts.join(' \u2022 ');
+  }
+
+  Widget _buildInfoBadge(IconData icon, String label, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: color),
+          const SizedBox(width: 4),
+          Text(label, style: TextStyle(fontSize: 12, color: color)),
+        ],
+      ),
+    );
+  }
+
   Widget _buildMiniStat({
     required IconData icon,
     required String value,
@@ -859,23 +1321,6 @@ class _MatchesTabState extends State<MatchesTab> {
         Text(label, style: TextStyle(fontSize: 11, color: Colors.grey[600])),
       ],
     );
-  }
-
-  // Generate dummy stats for demo
-  String _generateDummyPace() {
-    final min = 4 + _random.nextInt(3);
-    final sec = _random.nextInt(60).toString().padLeft(2, '0');
-    return "$min'$sec\"/km";
-  }
-
-  String _generateDummyWeeklyDistance() {
-    final km = 15 + _random.nextInt(40);
-    return '$km km';
-  }
-
-  String _generateDummyTimePreference() {
-    final preferences = ['Morning', 'Evening', 'Afternoon', 'Night'];
-    return preferences[_random.nextInt(preferences.length)];
   }
 
   Widget _buildQuestionnaireBanner() {
@@ -1140,12 +1585,17 @@ class _MatchesTabState extends State<MatchesTab> {
                           Row(
                             children: [
                               Flexible(
-                                child: Text(
-                                  _getCreatorName(creatorProfile, isOwnRoute),
+                                child: HighlightedText(
+                                  text: _getCreatorName(
+                                    creatorProfile,
+                                    isOwnRoute,
+                                  ),
+                                  searchQuery: _searchQuery,
                                   style: const TextStyle(
                                     fontWeight: FontWeight.w600,
                                     fontSize: 15,
                                   ),
+                                  maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               ),
@@ -1283,17 +1733,21 @@ class _MatchesTabState extends State<MatchesTab> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            route.title ?? 'Untitled Route',
+                          HighlightedText(
+                            text: route.title ?? 'Untitled Route',
+                            searchQuery: _searchQuery,
                             style: const TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.bold,
                             ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                           if (route.description != null) ...[
                             const SizedBox(height: 4),
-                            Text(
-                              route.description!,
+                            HighlightedText(
+                              text: route.description!,
+                              searchQuery: _searchQuery,
                               style: TextStyle(
                                 fontSize: 14,
                                 color: Colors.grey[600],

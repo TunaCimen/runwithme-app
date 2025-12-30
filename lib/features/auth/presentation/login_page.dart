@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../data/auth_service.dart';
 import 'sign_up_page.dart';
+import 'welcome_screen.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -42,7 +43,9 @@ class _LoginPageState extends State<LoginPage> {
     setState(() => _isLoading = false);
 
     if (result.success) {
-      Navigator.of(context).pushReplacementNamed('/home');
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (context) => const WelcomeScreen()),
+      );
     } else if (result.emailNotVerified) {
       // Try to get email from backend using username
       var email = result.email;
@@ -517,33 +520,6 @@ class _LoginPageState extends State<LoginPage> {
                                     fontWeight: FontWeight.w600,
                                   ),
                                 ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 32),
-
-                // Terms and privacy
-                RichText(
-                  textAlign: TextAlign.center,
-                  text: TextSpan(
-                    style: TextStyle(fontSize: 13, color: Colors.grey[600]),
-                    children: const [
-                      TextSpan(text: 'By continuing, you agree to our\n'),
-                      TextSpan(
-                        text: 'Terms of Service',
-                        style: TextStyle(
-                          color: Color(0xFF7ED321),
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      TextSpan(text: ' and '),
-                      TextSpan(
-                        text: 'Privacy Policy',
-                        style: TextStyle(
-                          color: Color(0xFF7ED321),
-                          fontWeight: FontWeight.w500,
                         ),
                       ),
                     ],

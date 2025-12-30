@@ -129,6 +129,18 @@ class ChatApiClient {
     }
   }
 
+  /// Get unread message count for the current user
+  Future<int> getUnreadCount() async {
+    final response = await _dio.get('/api/v1/chat/unread-count');
+    final data = _decodeResponse(response.data);
+
+    if (data is Map) {
+      return data['unreadCount'] ?? 0;
+    }
+
+    return 0;
+  }
+
   dynamic _decodeResponse(dynamic data) {
     if (data is Map<String, dynamic>) return data;
     if (data is List) return data;

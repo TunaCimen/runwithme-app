@@ -1,11 +1,13 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../data/chat_repository.dart';
+import '../data/chat_websocket_service.dart';
 import '../data/models/message_dto.dart';
 import '../data/models/conversation_dto.dart';
 import '../../friends/data/models/friendship_dto.dart';
 
-// Debug flag
-const bool _debugChat = true;
+// Debug flag - set to false for production
+const bool _debugChat = false;
 void _log(String message) {
   if (_debugChat) {
     debugPrint('[ChatProvider] $message');
@@ -15,6 +17,12 @@ void _log(String message) {
 /// Provider for managing chat state
 class ChatProvider extends ChangeNotifier {
   final ChatRepository _repository;
+  final ChatWebSocketService _webSocketService = ChatWebSocketService();
+
+  // WebSocket subscriptions
+  StreamSubscription<MessageDto>? _newMessageSubscription;
+  StreamSubscription<ReadReceiptPayload>? _readReceiptSubscription;
+  StreamSubscription<bool>? _connectionStateSubscription;
 
   // Conversations list state
   List<ConversationDto> _conversations = [];
@@ -35,10 +43,20 @@ class ChatProvider extends ChangeNotifier {
   // Total unread count
   int _totalUnreadCount = 0;
 
+  // WebSocket connection state
+  bool _isWebSocketConnected = false;
+
+  // Current user ID (needed for determining message direction)
+  String? _currentUserId;
+
+  // Base URL for WebSocket
+  final String _baseUrl;
+
   ChatProvider({
     String baseUrl = 'http://35.158.35.102:8080',
     ChatRepository? repository,
-  }) : _repository = repository ?? ChatRepository(baseUrl: baseUrl);
+  })  : _baseUrl = baseUrl,
+        _repository = repository ?? ChatRepository(baseUrl: baseUrl);
 
   // Getters
   List<ConversationDto> get conversations => _conversations;
@@ -53,13 +71,116 @@ class ChatProvider extends ChangeNotifier {
 
   bool get sendingMessage => _sendingMessage;
   int get totalUnreadCount => _totalUnreadCount;
+  bool get isWebSocketConnected => _isWebSocketConnected;
 
-  /// Set authentication token
-  void setAuthToken(String token) {
+  /// Set authentication token and connect to WebSocket
+  void setAuthToken(String token, {String? userId}) {
     _log(
       'setAuthToken called: token=${token.substring(0, token.length > 10 ? 10 : token.length)}...',
     );
     _repository.setAuthToken(token);
+    _currentUserId = userId;
+
+    // Connect to WebSocket
+    _connectWebSocket(token);
+  }
+
+  /// Set current user ID
+  void setCurrentUserId(String userId) {
+    _currentUserId = userId;
+  }
+
+  /// Connect to WebSocket
+  void _connectWebSocket(String token) {
+    _log('Connecting to WebSocket...');
+
+    // Cancel existing subscriptions
+    _newMessageSubscription?.cancel();
+    _readReceiptSubscription?.cancel();
+    _connectionStateSubscription?.cancel();
+
+    // Subscribe to WebSocket events
+    _newMessageSubscription = _webSocketService.newMessageStream.listen(
+      _handleNewMessage,
+    );
+    _readReceiptSubscription = _webSocketService.readReceiptStream.listen(
+      _handleReadReceipt,
+    );
+    _connectionStateSubscription =
+        _webSocketService.connectionStateStream.listen((connected) {
+      _isWebSocketConnected = connected;
+      _log('WebSocket connection state: $connected');
+      notifyListeners();
+    });
+
+    // Connect
+    _webSocketService.connect(token, baseUrl: _baseUrl);
+  }
+
+  /// Handle new message from WebSocket
+  void _handleNewMessage(MessageDto message) {
+    _log('Received new message via WebSocket: ${message.id}');
+
+    // Determine if this is an incoming message (not from current user)
+    final isIncoming = message.senderId != _currentUserId;
+
+    // If message is for active conversation, add it
+    if (_activeConversationUserId == message.senderId ||
+        _activeConversationUserId == message.recipientId) {
+      // Check if message already exists to avoid duplicates
+      final exists = _currentMessages.any((m) => m.id == message.id);
+      if (!exists) {
+        _currentMessages = [message, ..._currentMessages];
+      }
+    }
+
+    // Update conversation list
+    _updateConversationWithNewMessage(message);
+
+    // Update unread count if it's an incoming message and not in active conversation
+    if (isIncoming && _activeConversationUserId != message.senderId) {
+      _totalUnreadCount++;
+    }
+
+    notifyListeners();
+  }
+
+  /// Handle read receipt from WebSocket
+  void _handleReadReceipt(ReadReceiptPayload receipt) {
+    _log(
+      'Received read receipt: ${receipt.messageIds.length} messages read by ${receipt.readByUsername}',
+    );
+
+    // Update messages in current conversation
+    _currentMessages = _currentMessages.map((msg) {
+      if (receipt.messageIds.contains(msg.id)) {
+        return msg.copyWith(isRead: true);
+      }
+      return msg;
+    }).toList();
+
+    notifyListeners();
+  }
+
+  /// Fetch unread count from API
+  Future<void> fetchUnreadCount() async {
+    _log('Fetching unread count...');
+    final result = await _repository.getUnreadCount();
+    if (result.success && result.data != null) {
+      _totalUnreadCount = result.data!;
+      _log('Unread count: $_totalUnreadCount');
+      notifyListeners();
+    }
+  }
+
+  /// Disconnect WebSocket
+  void disconnectWebSocket() {
+    _log('Disconnecting WebSocket...');
+    _webSocketService.disconnect();
+    _newMessageSubscription?.cancel();
+    _readReceiptSubscription?.cancel();
+    _connectionStateSubscription?.cancel();
+    _isWebSocketConnected = false;
   }
 
   /// Load all conversations by fetching all messages and grouping by user
@@ -195,9 +316,11 @@ class ChatProvider extends ChangeNotifier {
 
     _conversationsLoading = true;
     _conversationsError = null;
+    _currentUserId = currentUserId;
     notifyListeners();
 
     final List<ConversationDto> builtConversations = [];
+    int totalUnread = 0;
 
     // Check chat history for each friend
     for (final friend in friends) {
@@ -209,18 +332,29 @@ class ChatProvider extends ChangeNotifier {
       _log('  Checking chat history with: $friendUsername ($friendId)');
 
       try {
+        // Fetch more messages to calculate unread count
         final result = await _repository.getChatHistory(
           friendId,
           page: 0,
-          size: 1,
+          size: 50, // Get more messages to calculate unread count
         );
 
         if (result.success &&
             result.data != null &&
             result.data!.content.isNotEmpty) {
-          final lastMessage = result.data!.content.first;
+          final messages = result.data!.content;
+          final lastMessage = messages.first;
+
+          // Calculate unread count - messages from friend that are not read
+          int unreadCount = 0;
+          for (final msg in messages) {
+            if (msg.senderId == friendId && !msg.isRead) {
+              unreadCount++;
+            }
+          }
+
           _log(
-            '    -> Has messages, last: "${lastMessage.content.substring(0, lastMessage.content.length > 20 ? 20 : lastMessage.content.length)}..."',
+            '    -> Has ${messages.length} messages, unread: $unreadCount, last: "${lastMessage.content.substring(0, lastMessage.content.length > 20 ? 20 : lastMessage.content.length)}..."',
           );
 
           builtConversations.add(
@@ -232,10 +366,11 @@ class ChatProvider extends ChangeNotifier {
               otherLastName: friend.friendLastName,
               lastMessage: lastMessage,
               lastMessageAt: lastMessage.createdAt,
-              unreadCount:
-                  0, // We don't have this info without the backend endpoint
+              unreadCount: unreadCount,
             ),
           );
+
+          totalUnread += unreadCount;
         } else if (result.errorCode == 'NOT_FOUND') {
           _log('    -> No messages yet');
         } else {
@@ -254,8 +389,8 @@ class ChatProvider extends ChangeNotifier {
     });
 
     _conversations = builtConversations;
-    _totalUnreadCount = 0; // We don't have unread counts without backend
-    _log('  Built ${_conversations.length} conversations from friends');
+    _totalUnreadCount = totalUnread;
+    _log('  Built ${_conversations.length} conversations, total unread: $totalUnread');
 
     _conversationsLoading = false;
     notifyListeners();
@@ -273,13 +408,49 @@ class ChatProvider extends ChangeNotifier {
 
     await loadMessages(refresh: true);
 
-    // Mark conversation as read (ignore errors for new conversations)
-    _log('  Marking conversation as read...');
-    await _repository.markConversationAsRead(userId);
-    _updateConversationUnread(userId, 0);
+    // Mark all unread messages in this conversation as read
+    await markConversationMessagesAsRead(userId);
     _log(
       '  openConversation complete: ${_currentMessages.length} messages loaded',
     );
+  }
+
+  /// Mark all messages in a conversation as read
+  Future<void> markConversationMessagesAsRead(String otherUserId) async {
+    _log('markConversationMessagesAsRead called: userId=$otherUserId');
+
+    // Get unread message IDs from current messages
+    final unreadMessageIds = _currentMessages
+        .where((m) => !m.isRead && m.senderId == otherUserId)
+        .map((m) => m.id)
+        .toList();
+
+    if (unreadMessageIds.isEmpty) {
+      _log('  No unread messages to mark as read');
+      return;
+    }
+
+    _log('  Marking ${unreadMessageIds.length} messages as read');
+
+    // Call API to mark messages as read
+    final result = await _repository.markAsRead(messageIds: unreadMessageIds);
+
+    if (result.success) {
+      // Update local messages
+      _currentMessages = _currentMessages.map((m) {
+        if (unreadMessageIds.contains(m.id)) {
+          return m.copyWith(isRead: true);
+        }
+        return m;
+      }).toList();
+
+      // Update conversation unread count
+      _updateConversationUnread(otherUserId, 0);
+
+      _log('  Messages marked as read successfully');
+    } else {
+      _log('  Failed to mark messages as read: ${result.message}');
+    }
   }
 
   /// Load messages for the current conversation
@@ -425,19 +596,6 @@ class ChatProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Handle new message received (from WebSocket)
-  void onNewMessage(MessageDto message) {
-    // If message is for active conversation, add it
-    if (_activeConversationUserId == message.senderId ||
-        _activeConversationUserId == message.recipientId) {
-      _currentMessages = [message, ..._currentMessages];
-    }
-
-    // Update conversation list
-    _updateConversationWithNewMessage(message);
-    notifyListeners();
-  }
-
   /// Update conversation with new message
   void _updateConversationWithNewMessage(MessageDto message) {
     final otherUserId = _activeConversationUserId == message.senderId
@@ -503,6 +661,9 @@ class ChatProvider extends ChangeNotifier {
 
   /// Clear all data (for logout)
   void clear() {
+    // Disconnect WebSocket
+    disconnectWebSocket();
+
     _conversations = [];
     _conversationsLoading = false;
     _conversationsError = null;
@@ -515,7 +676,14 @@ class ChatProvider extends ChangeNotifier {
     _messagesError = null;
 
     _totalUnreadCount = 0;
+    _currentUserId = null;
 
     notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    disconnectWebSocket();
+    super.dispose();
   }
 }
