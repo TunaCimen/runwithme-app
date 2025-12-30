@@ -2,10 +2,12 @@
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/models/user.dart';
+import '../../notifications/services/firebase_messaging_service.dart';
 import 'auth_repository.dart';
 
 class AuthService {
   final AuthRepository _repository;
+  final FirebaseMessagingService _messagingService;
 
   static String? _accessToken;
   static String? _refreshToken;
@@ -20,7 +22,9 @@ class AuthService {
   AuthService({
     String baseUrl = 'http://35.158.35.102:8080',
     AuthRepository? repository,
-  }) : _repository = repository ?? AuthRepository(baseUrl: baseUrl);
+    FirebaseMessagingService? messagingService,
+  }) : _repository = repository ?? AuthRepository(baseUrl: baseUrl),
+       _messagingService = messagingService ?? FirebaseMessagingService();
 
   /// Initialize auth state from local storage
   /// Call this when the app starts
@@ -103,6 +107,11 @@ class AuthService {
 
       // Save to local storage for persistent login
       await _saveToStorage();
+
+      // Register device for push notifications
+      if (_accessToken != null) {
+        await _messagingService.initialize(accessToken: _accessToken!);
+      }
     }
 
     return result;
@@ -164,6 +173,9 @@ class AuthService {
 
   // Logout
   Future<void> logout() async {
+    // Unregister device from push notifications
+    await _messagingService.cleanup();
+
     _accessToken = null;
     _refreshToken = null;
     _currentUser = null;

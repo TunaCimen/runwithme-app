@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "933661572754",
+    "project_id": "runwithme-eb52d",
+    "storage_bucket": "runwithme-eb52d.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:933661572754:android:6ac4e41674ea00e4f7704b",
+        "android_client_info": {
+          "package_name": "com.example.runwithme_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCWp4wNcuGnuc6cUKvg3KBSbmcmOuogmNI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

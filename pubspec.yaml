@@ -17,6 +17,11 @@ dependencies:
   http: ^1.2.0
   geolocator: ^14.0.2
   image_picker: ^1.1.2
+  firebase_core: ^3.8.1
+  firebase_messaging: ^15.1.6
+  shared_preferences: ^2.3.4
+  url_launcher: ^6.3.1
+  stomp_dart_client: ^2.0.0
 
 dev_dependencies:
   flutter_test:
