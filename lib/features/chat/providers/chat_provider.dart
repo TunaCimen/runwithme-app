@@ -542,11 +542,13 @@ class ChatProvider extends ChangeNotifier {
 
     if (result.success && result.data != null) {
       _log('  Message sent successfully, id=${result.data!.id}');
-      // Add message to the beginning of the list (newest first)
-      _currentMessages = [result.data!, ..._currentMessages];
-
-      // Update conversation in the list
-      _updateConversationWithNewMessage(result.data!);
+      // Only add message locally if WebSocket is not connected
+      // When WebSocket is connected, we'll receive the message via _handleNewMessage
+      // which avoids duplicate messages
+      if (!_isWebSocketConnected) {
+        _currentMessages = [result.data!, ..._currentMessages];
+        _updateConversationWithNewMessage(result.data!);
+      }
     } else {
       _log('  Failed to send message: ${result.message}');
     }
@@ -571,13 +573,16 @@ class ChatProvider extends ChangeNotifier {
     );
 
     if (result.success && result.data != null) {
-      // If this is the active conversation, add to messages
-      if (_activeConversationUserId == userId) {
-        _currentMessages = [result.data!, ..._currentMessages];
+      // Only add message locally if WebSocket is not connected
+      // When WebSocket is connected, we'll receive the message via _handleNewMessage
+      if (!_isWebSocketConnected) {
+        // If this is the active conversation, add to messages
+        if (_activeConversationUserId == userId) {
+          _currentMessages = [result.data!, ..._currentMessages];
+        }
+        // Update or add conversation
+        _updateConversationWithNewMessage(result.data!);
       }
-
-      // Update or add conversation
-      _updateConversationWithNewMessage(result.data!);
     }
 
     _sendingMessage = false;
@@ -598,9 +603,18 @@ class ChatProvider extends ChangeNotifier {
 
   /// Update conversation with new message
   void _updateConversationWithNewMessage(MessageDto message) {
-    final otherUserId = _activeConversationUserId == message.senderId
+    // Use current user ID to determine the other user, not active conversation
+    // This fixes the bug where navigating away after sending would show yourself
+    // in the conversation list
+    final otherUserId = _currentUserId == message.senderId
         ? message.recipientId
         : message.senderId;
+
+    // Skip if we can't determine the other user (shouldn't happen, but safety check)
+    if (otherUserId == _currentUserId) {
+      _log('  Skipping conversation update: otherUserId equals currentUserId');
+      return;
+    }
 
     final index = _conversations.indexWhere((c) => c.oderId == otherUserId);
 

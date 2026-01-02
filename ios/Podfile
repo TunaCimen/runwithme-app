@@ -4,11 +4,12 @@ platform :ios, '13.0'
 # CocoaPods analytics sends network stats synchronously affecting flutter build latency.
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
 
-project 'Runner', {
-  'Debug' => :debug,
-  'Profile' => :release,
-  'Release' => :release,
-}
+# Note: Custom project configuration commented out due to Xcode 26 beta compatibility issue
+# project 'Runner', {
+#   'Debug' => :debug,
+#   'Profile' => :profile,
+#   'Release' => :release,
+# }
 
 def flutter_root
   generated_xcode_build_settings_path = File.expand_path(File.join('..', 'Flutter', 'Generated.xcconfig'), __FILE__)
