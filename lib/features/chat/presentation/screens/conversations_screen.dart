@@ -5,7 +5,11 @@ import '../../providers/chat_provider.dart';
 import '../../providers/global_chat_provider.dart';
 import '../widgets/conversation_tile.dart';
 import 'package:runwithme_app/features/chat/presentation/screens/chat_screen.dart';
+import 'package:runwithme_app/features/chat/presentation/screens/mcp_integrated_chat_screen.dart';
 import '../../../../core/utils/profile_pic_helper.dart';
+
+/// Username used to identify the MCP AI assistant
+const String mcpUsername = 'MCP';
 
 /// Screen showing all conversations
 class ConversationsScreen extends StatefulWidget {
@@ -102,19 +106,30 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
             return _buildEmptyState();
           }
 
+          // Sort conversations to put MCP at the top
+          final sortedConversations = _sortConversationsWithMcpFirst(
+            _chatProvider.conversations,
+          );
+
           return RefreshIndicator(
             onRefresh: _loadConversationsFromFriends,
             child: ListView.builder(
-              itemCount: _chatProvider.conversations.length,
+              itemCount: sortedConversations.length,
               itemBuilder: (context, index) {
-                final conversation = _chatProvider.conversations[index];
+                final conversation = sortedConversations[index];
+                final isMcp = _isMcpConversation(conversation);
+
                 return Column(
                   children: [
                     ConversationTile(
                       conversation: conversation,
-                      onTap: () => _openConversation(conversation.oderId),
+                      isMcpAssistant: isMcp,
+                      onTap: () => _openConversation(
+                        conversation.oderId,
+                        isMcp: isMcp,
+                      ),
                     ),
-                    if (index < _chatProvider.conversations.length - 1)
+                    if (index < sortedConversations.length - 1)
                       Divider(height: 1, indent: 72, color: Colors.grey[200]),
                   ],
                 );
@@ -126,6 +141,28 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
     );
   }
 
+  /// Check if a conversation is with the MCP assistant
+  bool _isMcpConversation(dynamic conversation) {
+    final username = conversation.otherUsername?.toString().toUpperCase() ?? '';
+    final displayName =
+        conversation.otherDisplayName?.toString().toUpperCase() ?? '';
+    return username == mcpUsername.toUpperCase() ||
+        displayName == mcpUsername.toUpperCase();
+  }
+
+  /// Sort conversations to put MCP at the top
+  List<dynamic> _sortConversationsWithMcpFirst(List<dynamic> conversations) {
+    final sorted = List.from(conversations);
+    sorted.sort((a, b) {
+      final aIsMcp = _isMcpConversation(a);
+      final bIsMcp = _isMcpConversation(b);
+      if (aIsMcp && !bIsMcp) return -1;
+      if (!aIsMcp && bIsMcp) return 1;
+      return 0; // Keep original order for non-MCP conversations
+    });
+    return sorted;
+  }
+
   Widget _buildEmptyState() {
     return Center(
       child: Padding(
@@ -133,7 +170,11 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.chat_bubble_outline, size: 80, color: Colors.grey[300]),
+            Icon(
+              Icons.chat_bubble_outline,
+              size: 80,
+              color: Colors.grey[300],
+            ),
             const SizedBox(height: 24),
             const Text(
               'No Messages Yet',
@@ -211,21 +252,37 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
     );
   }
 
-  void _openConversation(String userId) {
+  void _openConversation(String userId, {bool isMcp = false}) {
     final conversation = _chatProvider.getConversationWith(userId);
     final profilePicUrl = ProfilePicHelper.getProfilePicUrl(
       conversation?.otherProfilePic,
     );
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => ChatScreen(
-          otherUserId: userId,
-          otherUserName: conversation?.otherDisplayName ?? 'User',
-          otherProfilePic: profilePicUrl,
+
+    if (isMcp) {
+      // Open MCP integrated chat screen with reset button
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => McpIntegratedChatScreen(
+            otherUserId: userId,
+            otherUserName: conversation?.otherDisplayName ?? 'MCP',
+            otherProfilePic: profilePicUrl,
+          ),
         ),
-      ),
-    );
+      );
+    } else {
+      // Open regular chat screen
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => ChatScreen(
+            otherUserId: userId,
+            otherUserName: conversation?.otherDisplayName ?? 'User',
+            otherProfilePic: profilePicUrl,
+          ),
+        ),
+      );
+    }
   }
 
   void _showNewConversationSheet() {

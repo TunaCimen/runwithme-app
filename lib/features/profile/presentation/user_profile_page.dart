@@ -1,17 +1,22 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 import '../../../core/models/user_profile.dart';
 import '../../../core/models/user_statistics.dart';
 import '../../../core/models/run_session.dart';
+import '../../../core/models/route.dart' as route_model;
 import '../../../core/utils/profile_pic_helper.dart';
 import '../../auth/data/auth_service.dart';
 import '../data/profile_repository.dart';
-import '../../map/data/models/route_dto.dart';
+import '../../map/data/route_repository.dart';
 import '../../feed/data/models/feed_post_dto.dart';
 import '../../friends/data/friends_repository.dart';
 import '../../friends/data/friends_api_client.dart';
 import '../../chat/presentation/screens/chat_screen.dart';
 import '../../feed/presentation/widgets/feed_post_card.dart';
 import '../../feed/presentation/screens/post_detail_screen.dart';
+
+typedef UserRoute = route_model.Route;
 
 /// Page to view another user's profile
 class UserProfilePage extends StatefulWidget {
@@ -29,6 +34,7 @@ class _UserProfilePageState extends State<UserProfilePage>
   final _authService = AuthService();
   final _profileRepository = ProfileRepository();
   final _friendsRepository = FriendsRepository();
+  final _routeRepository = RouteRepository();
 
   late TabController _tabController;
 
@@ -45,10 +51,11 @@ class _UserProfilePageState extends State<UserProfilePage>
   UserStatistics? _userStatistics;
 
   // User data (routes, runs, posts)
-  List<RouteDto> _userRoutes = [];
+  List<UserRoute> _userRoutes = [];
   List<RunSession> _userRuns = [];
   List<FeedPostDto> _userPosts = [];
   bool _isLoadingData = false;
+  bool _isLoadingRoutes = false;
 
   @override
   void initState() {
@@ -199,9 +206,8 @@ class _UserProfilePageState extends State<UserProfilePage>
 
     setState(() => _isLoadingData = true);
 
-    // Load all data in parallel
+    // Load runs and posts in parallel
     final results = await Future.wait([
-      _profileRepository.getUserRoutes(widget.userId, accessToken: accessToken),
       _profileRepository.getUserRunSessions(
         widget.userId,
         accessToken: accessToken,
@@ -211,23 +217,63 @@ class _UserProfilePageState extends State<UserProfilePage>
 
     if (mounted) {
       setState(() {
-        _isLoadingData = false;
-
-        final routesResult = results[0] as UserRoutesResult;
-        if (routesResult.success) {
-          _userRoutes = routesResult.routes;
-        }
-
-        final runsResult = results[1] as UserRunsResult;
+        final runsResult = results[0] as UserRunsResult;
         if (runsResult.success) {
           _userRuns = runsResult.runs;
         }
 
-        final postsResult = results[2] as UserPostsResult;
+        final postsResult = results[1] as UserPostsResult;
         if (postsResult.success) {
           _userPosts = postsResult.posts;
         }
       });
+    }
+
+    // Load routes separately using the public routes approach
+    await _loadUserRoutes();
+
+    if (mounted) {
+      setState(() => _isLoadingData = false);
+    }
+  }
+
+  /// Load user routes from public routes filtered by user ID
+  Future<void> _loadUserRoutes() async {
+    final accessToken = _authService.accessToken;
+    if (accessToken == null) return;
+
+    setState(() => _isLoadingRoutes = true);
+
+    // Get public routes and filter by user ID
+    final result = await _routeRepository.getPublicRoutes(
+      page: 0,
+      size: 50,
+      accessToken: accessToken,
+    );
+
+    if (result.success && result.routes != null) {
+      // Filter routes by this user's ID
+      final userRoutes = result.routes!
+          .where((r) => r.creatorId == widget.userId)
+          .toList();
+
+      // Fetch full route details for map display
+      final fullRoutes = await _routeRepository.fetchFullRouteDetails(
+        routes: userRoutes,
+        accessToken: accessToken,
+      );
+
+      if (mounted) {
+        setState(() {
+          _userRoutes = fullRoutes;
+          _userRoutes.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+          _isLoadingRoutes = false;
+        });
+      }
+    } else {
+      if (mounted) {
+        setState(() => _isLoadingRoutes = false);
+      }
     }
   }
 
@@ -766,6 +812,12 @@ class _UserProfilePageState extends State<UserProfilePage>
   }
 
   Widget _buildRoutesTab() {
+    if (_isLoadingRoutes) {
+      return const Center(
+        child: CircularProgressIndicator(color: Color(0xFF7ED321)),
+      );
+    }
+
     if (_userRoutes.isEmpty) {
       return _buildEmptyState(
         icon: Icons.route,
@@ -779,65 +831,222 @@ class _UserProfilePageState extends State<UserProfilePage>
       itemCount: _userRoutes.length,
       itemBuilder: (context, index) {
         final route = _userRoutes[index];
-        return Card(
-          margin: const EdgeInsets.only(bottom: 12),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 16),
+          child: _buildRouteCard(route),
+        );
+      },
+    );
+  }
+
+  Widget _buildRouteCard(UserRoute route) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE5E5E5)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
           ),
-          child: ListTile(
-            contentPadding: const EdgeInsets.all(16),
-            leading: Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                color: Colors.blue.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Icon(Icons.route, color: Colors.blue),
-            ),
-            title: Text(
-              route.title ?? 'Untitled Route',
-              style: const TextStyle(fontWeight: FontWeight.bold),
-            ),
-            subtitle: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    if (route.distanceM != null)
-                      Text(
-                        '${(route.distanceM! / 1000).toStringAsFixed(2)} km',
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Map preview
+          ClipRRect(
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+            child: SizedBox(
+              height: 180,
+              child: FlutterMap(
+                options: MapOptions(
+                  initialCenter: _calculateRouteCenter(route),
+                  initialZoom: _calculateZoomLevel(route),
+                  interactionOptions: const InteractionOptions(
+                    flags: InteractiveFlag.none,
+                  ),
+                ),
+                children: [
+                  TileLayer(
+                    urlTemplate:
+                        'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                    userAgentPackageName: 'com.example.runwithme_app',
+                  ),
+                  PolylineLayer(
+                    polylines: [
+                      Polyline(
+                        points: route.points.isNotEmpty
+                            ? route.points
+                                .map((p) => LatLng(p.latitude, p.longitude))
+                                .toList()
+                            : [
+                                LatLng(
+                                  route.startPointLat,
+                                  route.startPointLon,
+                                ),
+                                LatLng(route.endPointLat, route.endPointLon),
+                              ],
+                        strokeWidth: 4.0,
+                        color: const Color(0xFF7ED321),
                       ),
-                    if (route.difficulty != null) ...[
-                      const SizedBox(width: 16),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 2,
+                    ],
+                  ),
+                  MarkerLayer(
+                    markers: [
+                      Marker(
+                        point: LatLng(route.startPointLat, route.startPointLon),
+                        width: 28,
+                        height: 28,
+                        child: Container(
+                          decoration: const BoxDecoration(
+                            color: Colors.green,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.play_arrow,
+                            color: Colors.white,
+                            size: 14,
+                          ),
                         ),
-                        decoration: BoxDecoration(
-                          color: _getDifficultyColor(
-                            route.difficulty!,
-                          ).withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          route.difficulty!,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: _getDifficultyColor(route.difficulty!),
+                      ),
+                      Marker(
+                        point: LatLng(route.endPointLat, route.endPointLon),
+                        width: 28,
+                        height: 28,
+                        child: Container(
+                          decoration: const BoxDecoration(
+                            color: Colors.red,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.stop,
+                            color: Colors.white,
+                            size: 14,
                           ),
                         ),
                       ),
                     ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // Route details
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            route.title ?? 'Untitled Route',
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          if (route.description != null) ...[
+                            const SizedBox(height: 4),
+                            Text(
+                              route.description!,
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.grey[600],
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    if (route.difficulty != null)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: _getDifficultyColor(route.difficulty!),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          route.difficulty!,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+
+                // Time ago
+                Row(
+                  children: [
+                    Icon(Icons.access_time, size: 14, color: Colors.grey[600]),
+                    const SizedBox(width: 4),
+                    Text(
+                      _getTimeAgo(route.createdAt),
+                      style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+
+                // Stats
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    _buildRouteStatColumn(
+                      icon: Icons.straighten,
+                      value: route.formattedDistance,
+                      label: 'Distance',
+                    ),
+                    _buildRouteStatColumn(
+                      icon: Icons.timer,
+                      value: route.formattedDuration,
+                      label: 'Duration',
+                    ),
                   ],
                 ),
               ],
             ),
           ),
-        );
-      },
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRouteStatColumn({
+    required IconData icon,
+    required String value,
+    required String label,
+  }) {
+    return Column(
+      children: [
+        Icon(icon, size: 18, color: Colors.grey[700]),
+        const SizedBox(height: 6),
+        Text(
+          value,
+          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+        ),
+        const SizedBox(height: 2),
+        Text(label, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+      ],
     );
   }
 
@@ -854,6 +1063,90 @@ class _UserProfilePageState extends State<UserProfilePage>
       default:
         return Colors.grey;
     }
+  }
+
+  String _getTimeAgo(DateTime dateTime) {
+    final now = DateTime.now();
+    final difference = now.difference(dateTime);
+
+    if (difference.inDays > 365) {
+      final years = (difference.inDays / 365).floor();
+      return '${years}y ago';
+    } else if (difference.inDays > 30) {
+      final months = (difference.inDays / 30).floor();
+      return '${months}mo ago';
+    } else if (difference.inDays > 0) {
+      return '${difference.inDays}d ago';
+    } else if (difference.inHours > 0) {
+      return '${difference.inHours}h ago';
+    } else if (difference.inMinutes > 0) {
+      return '${difference.inMinutes}m ago';
+    } else {
+      return 'Just now';
+    }
+  }
+
+  LatLng _calculateRouteCenter(UserRoute route) {
+    if (route.points.isEmpty) {
+      return LatLng(
+        (route.startPointLat + route.endPointLat) / 2,
+        (route.startPointLon + route.endPointLon) / 2,
+      );
+    }
+
+    double minLat = route.points.first.latitude;
+    double maxLat = route.points.first.latitude;
+    double minLon = route.points.first.longitude;
+    double maxLon = route.points.first.longitude;
+
+    for (var point in route.points) {
+      if (point.latitude < minLat) minLat = point.latitude;
+      if (point.latitude > maxLat) maxLat = point.latitude;
+      if (point.longitude < minLon) minLon = point.longitude;
+      if (point.longitude > maxLon) maxLon = point.longitude;
+    }
+
+    return LatLng((minLat + maxLat) / 2, (minLon + maxLon) / 2);
+  }
+
+  double _calculateZoomLevel(UserRoute route) {
+    if (route.points.isEmpty) {
+      final latDiff = (route.startPointLat - route.endPointLat).abs();
+      final lonDiff = (route.startPointLon - route.endPointLon).abs();
+      final maxDiff = latDiff > lonDiff ? latDiff : lonDiff;
+
+      if (maxDiff < 0.005) return 16.0;
+      if (maxDiff < 0.01) return 15.0;
+      if (maxDiff < 0.02) return 14.0;
+      if (maxDiff < 0.05) return 13.0;
+      if (maxDiff < 0.1) return 12.0;
+      if (maxDiff < 0.2) return 11.0;
+      return 10.0;
+    }
+
+    double minLat = route.points.first.latitude;
+    double maxLat = route.points.first.latitude;
+    double minLon = route.points.first.longitude;
+    double maxLon = route.points.first.longitude;
+
+    for (var point in route.points) {
+      if (point.latitude < minLat) minLat = point.latitude;
+      if (point.latitude > maxLat) maxLat = point.latitude;
+      if (point.longitude < minLon) minLon = point.longitude;
+      if (point.longitude > maxLon) maxLon = point.longitude;
+    }
+
+    final latDiff = maxLat - minLat;
+    final lonDiff = maxLon - minLon;
+    final maxDiff = latDiff > lonDiff ? latDiff : lonDiff;
+
+    if (maxDiff < 0.005) return 15.0;
+    if (maxDiff < 0.01) return 14.0;
+    if (maxDiff < 0.02) return 13.0;
+    if (maxDiff < 0.05) return 12.0;
+    if (maxDiff < 0.1) return 11.0;
+    if (maxDiff < 0.2) return 10.0;
+    return 9.0;
   }
 
   Widget _buildPostsTab() {

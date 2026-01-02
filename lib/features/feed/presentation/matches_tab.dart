@@ -1,13 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import '../../../core/models/route.dart' as route_model;
 import '../../../core/models/user_profile.dart';
+import '../../../core/utils/external_map_launcher.dart';
 import '../../../core/utils/profile_pic_helper.dart';
 import '../../../core/widgets/highlighted_text.dart';
 import '../../../core/widgets/user_search_card.dart';
 import '../../auth/data/auth_service.dart';
 import '../../map/data/route_repository.dart';
+import '../../map/presentation/route_navigation_page.dart';
 import '../../profile/data/profile_repository.dart';
 import '../../profile/presentation/user_profile_page.dart';
 import '../../friends/providers/friends_provider.dart';
@@ -723,13 +726,203 @@ class _MatchesTabState extends State<MatchesTab> {
     }
   }
 
-  Future<void> _joinRoute(RunRoute route) async {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Joining route: ${route.title ?? "Untitled Route"}'),
-        action: SnackBarAction(label: 'View', onPressed: () {}),
+  /// Threshold distance in meters for triggering external navigation
+  static const double _navigationThresholdMeters = 100.0;
+
+  /// Navigate to route - checks distance first
+  Future<void> _navigateRoute(RunRoute route) async {
+    // Show loading indicator while getting location
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(
+        child: CircularProgressIndicator(color: Color(0xFF7ED321)),
       ),
     );
+
+    try {
+      // Check location permission
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        if (mounted) {
+          Navigator.pop(context); // Close loading dialog
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Location permission is required for navigation'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
+
+      // Get current location
+      final position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          timeLimit: Duration(seconds: 10),
+        ),
+      );
+
+      if (!mounted) return;
+      Navigator.pop(context); // Close loading dialog
+
+      final currentLocation = LatLng(position.latitude, position.longitude);
+      final startLocation = LatLng(route.startPointLat, route.startPointLon);
+
+      // Calculate distance to starting point
+      final distanceToStart = const Distance().as(
+        LengthUnit.Meter,
+        currentLocation,
+        startLocation,
+      );
+
+      debugPrint(
+        '[MatchesTab] Distance to route start: ${distanceToStart.toStringAsFixed(1)}m',
+      );
+
+      if (distanceToStart <= _navigationThresholdMeters) {
+        // User is close enough, navigate to in-app route navigation
+        _startInAppNavigation(route);
+      } else {
+        // User is far away, ask if they want external navigation
+        _showExternalNavigationDialog(route, distanceToStart);
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context); // Close loading dialog
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error getting location: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  /// Start in-app route navigation
+  Future<void> _startInAppNavigation(RunRoute route) async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => RouteNavigationPage(route: route),
+      ),
+    );
+
+    // If a run session was completed, show a success message
+    if (result != null && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Run completed and saved!'),
+          backgroundColor: Color(0xFF7ED321),
+        ),
+      );
+    }
+  }
+
+  /// Show dialog asking user if they want to navigate to the starting point
+  void _showExternalNavigationDialog(RunRoute route, double distanceMeters) {
+    final distanceText = distanceMeters >= 1000
+        ? '${(distanceMeters / 1000).toStringAsFixed(1)} km'
+        : '${distanceMeters.toInt()} m';
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.orange.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(
+                Icons.location_off,
+                color: Colors.orange,
+                size: 24,
+              ),
+            ),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Text(
+                'Starting Point is Far',
+                style: TextStyle(fontSize: 18),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'The starting location is $distanceText away.',
+              style: const TextStyle(fontSize: 15),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Would you like to navigate to the starting point using a maps app?',
+              style: TextStyle(fontSize: 15),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              // Start in-app navigation anyway
+              _startInAppNavigation(route);
+            },
+            child: const Text('Start Anyway'),
+          ),
+          ElevatedButton.icon(
+            onPressed: () {
+              Navigator.pop(context);
+              _launchExternalNavigation(route);
+            },
+            icon: const Icon(Icons.directions, size: 18),
+            label: const Text('Navigate to Start'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF7ED321),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Launch external map app for navigation to route start
+  Future<void> _launchExternalNavigation(RunRoute route) async {
+    final selectedApp = await ExternalMapLauncher.showMapAppPicker(context);
+
+    if (selectedApp == null) return;
+
+    final launched = await ExternalMapLauncher.launchNavigation(
+      mapApp: selectedApp,
+      latitude: route.startPointLat,
+      longitude: route.startPointLon,
+    );
+
+    if (!launched && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not open ${selectedApp.displayName}'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   @override
@@ -1839,12 +2032,12 @@ class _MatchesTabState extends State<MatchesTab> {
                 ),
                 const SizedBox(height: 16),
 
-                // Join button
+                // Navigate button
                 SizedBox(
                   width: double.infinity,
                   height: 50,
                   child: ElevatedButton(
-                    onPressed: () => _joinRoute(route),
+                    onPressed: () => _navigateRoute(route),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF7ED321),
                       foregroundColor: Colors.white,
@@ -1856,10 +2049,10 @@ class _MatchesTabState extends State<MatchesTab> {
                     child: const Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.directions_run),
+                        Icon(Icons.directions),
                         SizedBox(width: 8),
                         Text(
-                          'Join This Route',
+                          'Navigate to Route',
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w600,

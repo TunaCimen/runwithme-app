@@ -6,8 +6,14 @@ import '../../../../core/utils/profile_pic_helper.dart';
 class ConversationTile extends StatelessWidget {
   final ConversationDto conversation;
   final VoidCallback? onTap;
+  final bool isMcpAssistant;
 
-  const ConversationTile({super.key, required this.conversation, this.onTap});
+  const ConversationTile({
+    super.key,
+    required this.conversation,
+    this.onTap,
+    this.isMcpAssistant = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -17,35 +23,8 @@ class ConversationTile extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         child: Row(
           children: [
-            // Avatar
-            Builder(
-              builder: (context) {
-                final profilePicUrl = ProfilePicHelper.getProfilePicUrl(
-                  conversation.otherProfilePic,
-                );
-                return CircleAvatar(
-                  radius: 28,
-                  backgroundColor: const Color(
-                    0xFF7ED321,
-                  ).withValues(alpha: 0.2),
-                  backgroundImage: profilePicUrl != null
-                      ? NetworkImage(profilePicUrl)
-                      : null,
-                  child: profilePicUrl == null
-                      ? Text(
-                          conversation.otherDisplayName.isNotEmpty
-                              ? conversation.otherDisplayName[0].toUpperCase()
-                              : '?',
-                          style: const TextStyle(
-                            color: Color(0xFF7ED321),
-                            fontWeight: FontWeight.bold,
-                            fontSize: 20,
-                          ),
-                        )
-                      : null,
-                );
-              },
-            ),
+            // Avatar - special style for MCP
+            _buildAvatar(),
             const SizedBox(width: 12),
 
             // Content
@@ -56,16 +35,46 @@ class ConversationTile extends StatelessWidget {
                   Row(
                     children: [
                       Expanded(
-                        child: Text(
-                          conversation.otherDisplayName,
-                          style: TextStyle(
-                            fontWeight: conversation.unreadCount > 0
-                                ? FontWeight.w700
-                                : FontWeight.w600,
-                            fontSize: 16,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                        child: Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                conversation.otherDisplayName,
+                                style: TextStyle(
+                                  fontWeight: conversation.unreadCount > 0
+                                      ? FontWeight.w700
+                                      : FontWeight.w600,
+                                  fontSize: 16,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            // AI badge for MCP
+                            if (isMcpAssistant) ...[
+                              const SizedBox(width: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: const Color(
+                                    0xFF7ED321,
+                                  ).withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: const Text(
+                                  'AI',
+                                  style: TextStyle(
+                                    color: Color(0xFF7ED321),
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
                       ),
                       Text(
@@ -128,9 +137,70 @@ class ConversationTile extends StatelessWidget {
                 ],
               ),
             ),
+
+            // Arrow for MCP
+            if (isMcpAssistant)
+              Icon(
+                Icons.chevron_right,
+                color: Colors.grey[400],
+                size: 24,
+              ),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildAvatar() {
+    if (isMcpAssistant) {
+      // Special gradient avatar with robot icon for MCP
+      return Container(
+        width: 56,
+        height: 56,
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFF7ED321), Color(0xFF5DB91C)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(28),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF7ED321).withValues(alpha: 0.3),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: const Icon(
+          Icons.smart_toy_outlined,
+          color: Colors.white,
+          size: 28,
+        ),
+      );
+    }
+
+    // Regular avatar for other users
+    final profilePicUrl = ProfilePicHelper.getProfilePicUrl(
+      conversation.otherProfilePic,
+    );
+    return CircleAvatar(
+      radius: 28,
+      backgroundColor: const Color(0xFF7ED321).withValues(alpha: 0.2),
+      backgroundImage:
+          profilePicUrl != null ? NetworkImage(profilePicUrl) : null,
+      child: profilePicUrl == null
+          ? Text(
+              conversation.otherDisplayName.isNotEmpty
+                  ? conversation.otherDisplayName[0].toUpperCase()
+                  : '?',
+              style: const TextStyle(
+                color: Color(0xFF7ED321),
+                fontWeight: FontWeight.bold,
+                fontSize: 20,
+              ),
+            )
+          : null,
     );
   }
 }
