@@ -84,8 +84,8 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                 children: [
                   // Logo
                   Container(
-                    width: 120,
-                    height: 120,
+                    width: 140,
+                    height: 140,
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(30),
@@ -97,10 +97,15 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                         ),
                       ],
                     ),
-                    child: const Icon(
-                      Icons.flash_on,
-                      size: 64,
-                      color: Color(0xFF7ED321),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(30),
+                      child: Padding(
+                        padding: const EdgeInsets.all(8.0),
+                        child: Image.asset(
+                          'assets/images/runwithmelogo-removedbg.png',
+                          fit: BoxFit.contain,
+                        ),
+                      ),
                     ),
                   ),
                   const SizedBox(height: 40),

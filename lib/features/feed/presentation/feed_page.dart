@@ -214,6 +214,17 @@ class _FeedPageState extends State<FeedPage>
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
+        centerTitle: true,
+        leading: Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: Image.asset(
+              'assets/images/runwithmelogo-removedbg.png',
+              fit: BoxFit.contain,
+            ),
+          ),
+        ),
         title: const Text(
           'RunWithMe',
           style: TextStyle(
