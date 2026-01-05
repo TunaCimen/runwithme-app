@@ -10,6 +10,7 @@ import '../../auth/data/auth_service.dart';
 import '../data/profile_repository.dart';
 import '../../map/data/route_repository.dart';
 import '../../feed/data/models/feed_post_dto.dart';
+import '../../feed/data/feed_post_enricher.dart';
 import '../../friends/data/friends_repository.dart';
 import '../../friends/data/friends_api_client.dart';
 import '../../chat/presentation/screens/chat_screen.dart';
@@ -35,6 +36,7 @@ class _UserProfilePageState extends State<UserProfilePage>
   final _profileRepository = ProfileRepository();
   final _friendsRepository = FriendsRepository();
   final _routeRepository = RouteRepository();
+  final _postEnricher = FeedPostEnricher();
 
   late TabController _tabController;
 
@@ -216,17 +218,27 @@ class _UserProfilePageState extends State<UserProfilePage>
     ]);
 
     if (mounted) {
-      setState(() {
-        final runsResult = results[0] as UserRunsResult;
-        if (runsResult.success) {
+      final runsResult = results[0] as UserRunsResult;
+      if (runsResult.success) {
+        setState(() {
           _userRuns = runsResult.runs;
-        }
+        });
+      }
 
-        final postsResult = results[1] as UserPostsResult;
-        if (postsResult.success) {
-          _userPosts = postsResult.posts;
+      final postsResult = results[1] as UserPostsResult;
+      if (postsResult.success) {
+        // Enrich posts with route/run data from API
+        final enrichedPosts = await _postEnricher.enrichPosts(
+          postsResult.posts,
+          accessToken: accessToken,
+        );
+
+        if (mounted) {
+          setState(() {
+            _userPosts = enrichedPosts;
+          });
         }
-      });
+      }
     }
 
     // Load routes separately using the public routes approach

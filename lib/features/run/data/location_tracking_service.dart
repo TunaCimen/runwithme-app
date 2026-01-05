@@ -576,7 +576,11 @@ class LocationTrackingService {
   }
 
   /// Discard current tracking without saving
-  void discardTracking() {
+  /// This will also delete the session from the server if one was created
+  Future<void> discardTracking() async {
+    debugPrint('[LocationTrackingService] ========== DISCARD TRACKING ==========');
+    debugPrint('[LocationTrackingService] Session ID to delete: $_activeSessionId');
+
     _positionSubscription?.cancel();
     _positionSubscription = null;
     _timer?.cancel();
@@ -585,6 +589,21 @@ class LocationTrackingService {
     _uploadTimer = null;
     _isTracking = false;
     _isPaused = false;
+
+    // Delete session from server if one was created
+    if (_activeSessionId != null && _accessToken != null) {
+      debugPrint('[LocationTrackingService] Deleting session $_activeSessionId from server...');
+      final result = await _runRepository.deleteRunSession(
+        _activeSessionId!,
+        accessToken: _accessToken,
+      );
+      if (result.success) {
+        debugPrint('[LocationTrackingService] Session deleted from server successfully');
+      } else {
+        debugPrint('[LocationTrackingService] Failed to delete session from server: ${result.message}');
+      }
+    }
+
     _reset();
     debugPrint('[LocationTrackingService] Tracking discarded');
   }
@@ -628,6 +647,7 @@ class LocationTrackingService {
 
   /// Dispose the service
   void dispose() {
+    // Fire and forget - we can't await in dispose
     discardTracking();
   }
 }

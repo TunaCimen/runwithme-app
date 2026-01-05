@@ -203,7 +203,7 @@ class _LiveTrackingPageState extends State<LiveTrackingPage>
 
   Future<void> _stopTracking() async {
     if (_trackingService.trackPoints.length <= 1) {
-      _trackingService.discardTracking();
+      await _trackingService.discardTracking();
       setState(() {});
       return;
     }
@@ -262,8 +262,8 @@ class _LiveTrackingPageState extends State<LiveTrackingPage>
     );
   }
 
-  void _discardRun() {
-    _trackingService.discardTracking();
+  Future<void> _discardRun() async {
+    await _trackingService.discardTracking();
     setState(() {});
   }
 
@@ -659,21 +659,24 @@ class _LiveTrackingPageState extends State<LiveTrackingPage>
   void _showExitConfirmation() {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text('Exit Run?'),
         content: const Text(
           'Are you sure you want to exit? Your current run will be lost.',
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(dialogContext),
             child: const Text('Cancel'),
           ),
           TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _discardRun();
-              Navigator.pop(context);
+            onPressed: () async {
+              final navigator = Navigator.of(context);
+              Navigator.pop(dialogContext); // Close dialog
+              await _discardRun(); // Discard and delete from server
+              if (mounted) {
+                navigator.pop(); // Go back
+              }
             },
             style: TextButton.styleFrom(foregroundColor: Colors.red),
             child: const Text('Exit'),
