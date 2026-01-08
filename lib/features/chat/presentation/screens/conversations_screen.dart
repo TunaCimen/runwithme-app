@@ -1,13 +1,11 @@
 import 'package:flutter/material.dart';
 import '../../../auth/data/auth_service.dart';
 import '../../../friends/providers/friends_provider.dart';
-import '../../../mcp/presentation/screens/mcp_chat_screen.dart';
-import '../../../mcp/presentation/widgets/mcp_conversation_tile.dart';
-import '../../../mcp/providers/mcp_provider.dart';
 import '../../providers/chat_provider.dart';
 import '../../providers/global_chat_provider.dart';
 import '../widgets/conversation_tile.dart';
 import 'package:runwithme_app/features/chat/presentation/screens/chat_screen.dart';
+import 'package:runwithme_app/features/chat/presentation/screens/mcp_integrated_chat_screen.dart';
 import '../../../../core/utils/profile_pic_helper.dart';
 
 /// Username used to identify the MCP AI assistant
@@ -104,40 +102,34 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
             return _buildErrorState();
           }
 
-          // Filter out MCP conversations from regular list (we show it separately at top)
-          final regularConversations = _chatProvider.conversations
-              .where((c) => !_isMcpConversation(c))
-              .toList();
-
-          // If no regular conversations, show empty state with MCP at top
-          if (regularConversations.isEmpty) {
-            return _buildEmptyStateWithMcp();
+          if (_chatProvider.conversations.isEmpty) {
+            return _buildEmptyState();
           }
+
+          // Sort conversations to put MCP at the top
+          final sortedConversations = _sortConversationsWithMcpFirst(
+            _chatProvider.conversations,
+          );
 
           return RefreshIndicator(
             onRefresh: _loadConversationsFromFriends,
             child: ListView.builder(
-              itemCount: regularConversations.length + 1, // +1 for MCP tile at top
+              itemCount: sortedConversations.length,
               itemBuilder: (context, index) {
-                // First item is always MCP assistant
-                if (index == 0) {
-                  return McpConversationTile(
-                    mcpProvider: globalMcpProvider,
-                    onTap: () => _openMcpChat(),
-                  );
-                }
-
-                // Regular conversations (offset by 1 for MCP tile)
-                final conversation = regularConversations[index - 1];
+                final conversation = sortedConversations[index];
+                final isMcp = _isMcpConversation(conversation);
 
                 return Column(
                   children: [
                     ConversationTile(
                       conversation: conversation,
-                      isMcpAssistant: false,
-                      onTap: () => _openConversation(conversation.oderId),
+                      isMcpAssistant: isMcp,
+                      onTap: () => _openConversation(
+                        conversation.oderId,
+                        isMcp: isMcp,
+                      ),
                     ),
-                    if (index < regularConversations.length)
+                    if (index < sortedConversations.length - 1)
                       Divider(height: 1, indent: 72, color: Colors.grey[200]),
                   ],
                 );
@@ -158,66 +150,66 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
         displayName == mcpUsername.toUpperCase();
   }
 
-  /// Build empty state that still shows MCP assistant at top
-  Widget _buildEmptyStateWithMcp() {
-    return Column(
-      children: [
-        // Always show MCP at the top
-        McpConversationTile(
-          mcpProvider: globalMcpProvider,
-          onTap: () => _openMcpChat(),
-        ),
-        // Empty state message below
-        Expanded(
-          child: Center(
-            child: Padding(
-              padding: const EdgeInsets.all(32.0),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.chat_bubble_outline,
-                    size: 80,
-                    color: Colors.grey[300],
-                  ),
-                  const SizedBox(height: 24),
-                  const Text(
-                    'No Messages Yet',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black87,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    'Start a conversation with other runners!',
-                    style: TextStyle(fontSize: 16, color: Colors.grey[600]),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 24),
-                  ElevatedButton.icon(
-                    onPressed: _showNewConversationSheet,
-                    icon: const Icon(Icons.add),
-                    label: const Text('New Message'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF7ED321),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 24,
-                        vertical: 12,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                  ),
-                ],
+  /// Sort conversations to put MCP at the top
+  List<dynamic> _sortConversationsWithMcpFirst(List<dynamic> conversations) {
+    final sorted = List.from(conversations);
+    sorted.sort((a, b) {
+      final aIsMcp = _isMcpConversation(a);
+      final bIsMcp = _isMcpConversation(b);
+      if (aIsMcp && !bIsMcp) return -1;
+      if (!aIsMcp && bIsMcp) return 1;
+      return 0; // Keep original order for non-MCP conversations
+    });
+    return sorted;
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.chat_bubble_outline,
+              size: 80,
+              color: Colors.grey[300],
+            ),
+            const SizedBox(height: 24),
+            const Text(
+              'No Messages Yet',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: Colors.black87,
               ),
             ),
-          ),
+            const SizedBox(height: 12),
+            Text(
+              'Start a conversation with other runners!',
+              style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: _showNewConversationSheet,
+              icon: const Icon(Icons.add),
+              label: const Text('New Message'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF7ED321),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+          ],
         ),
-      ],
+      ),
     );
   }
 
@@ -260,33 +252,37 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
     );
   }
 
-  void _openConversation(String userId) {
+  void _openConversation(String userId, {bool isMcp = false}) {
     final conversation = _chatProvider.getConversationWith(userId);
     final profilePicUrl = ProfilePicHelper.getProfilePicUrl(
       conversation?.otherProfilePic,
     );
 
-    // Open regular chat screen
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => ChatScreen(
-          otherUserId: userId,
-          otherUserName: conversation?.otherDisplayName ?? 'User',
-          otherProfilePic: profilePicUrl,
+    if (isMcp) {
+      // Open MCP integrated chat screen with reset button
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => McpIntegratedChatScreen(
+            otherUserId: userId,
+            otherUserName: conversation?.otherDisplayName ?? 'MCP',
+            otherProfilePic: profilePicUrl,
+          ),
         ),
-      ),
-    );
-  }
-
-  /// Open the MCP assistant chat screen
-  void _openMcpChat() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => const McpChatScreen(),
-      ),
-    );
+      );
+    } else {
+      // Open regular chat screen
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => ChatScreen(
+            otherUserId: userId,
+            otherUserName: conversation?.otherDisplayName ?? 'User',
+            otherProfilePic: profilePicUrl,
+          ),
+        ),
+      );
+    }
   }
 
   void _showNewConversationSheet() {
